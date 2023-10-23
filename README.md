@@ -14,8 +14,8 @@ It fully supports cross compilation and Conan profiles (docs pending)
 Check the `tests` folder for some complete example projects.
 
 You need to include the `conan.py` tool somehow in your projects, either
-alongside the waf script, or embedded in your waf distribution. [See here]
-(https://waf.io/book/#_customization_and_redistribution) for more details.
+alongside the waf script, or embedded in your waf distribution. [See here](https://waf.io/book/#_customization_and_redistribution)
+for more details.
 
 After calling `conan install ...`, simply load the 'conan' tool in your
 `configure` method like any other waf tool, then call the method
@@ -43,8 +43,7 @@ environment keys work.
 
 You can see all the available *use names* when you call `waf configure`. This
 will print the full list of all available names, **including transient
-dependencies** and [package components]
-(https://docs.conan.io/2/examples/conanfile/package_info/components.html). 
+dependencies** and [package components](https://docs.conan.io/2/examples/conanfile/package_info/components.html). 
 
 You **must** pass the `conan` feature to your build generators, otherwise you
 will get link/compile errors due to missing transient dependencies. Example:

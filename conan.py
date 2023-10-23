@@ -85,6 +85,12 @@ def load_conan(
 	env.load(str(conan_deps))
 	env.load(str(conan_toolchain))
 
+	import os
+	conf.environ['PATH'] = os.pathsep.join((
+		conf.environ.get('PATH', ''),
+		os.pathsep.join(env['CONAN_BINPATH'])
+	))
+
 	for p in env['ALL_CONAN_PACKAGES']:
 		conf.msg("Conan usename", p)
 

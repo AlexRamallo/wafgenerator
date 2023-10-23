@@ -76,7 +76,7 @@ class WafDeps(object):
 			else:
 				assert(len(sp[0])>0) #Conan bug?
 				ref_name = '_'.join(sp)
-		elif parent_ref and parent_ref != ref_name:
+		elif parent_ref:
 			ref_name = f'{parent_ref}_{ref_name}'
 		return ref_name.replace('-', '_')
 
@@ -89,12 +89,7 @@ class WafDeps(object):
 			"conan_dependencies.py"
 		)
 
-		try:
-			deps = self.gen_deps()
-		except RecursionError as e:
-			print("RecursionError!! %s" % e)
-			breakpoint()
-			raise e
+		deps = self.gen_deps()
 
 		generator_files = {filename: serialize_configset(deps)}
 
@@ -120,16 +115,17 @@ class WafDeps(object):
 			"ALL_CONAN_PACKAGES": [],
 		}
 		self.depmap = {}
-		for req, dep in self.conanfile.dependencies.items():
-			print(dep.ref.name, " ver: ", dep.ref.version)
+
+		for req, dep in self.conanfile.dependencies.host.items():
+			# print(dep.ref, f", direct={req.direct}, build={req.build}")
 			if dep.cpp_info.has_components:
-				print("\t<has components>")
+				# print("\t<has components>")
 				comp_depnames = []
 				#generate "pkg::comp" for each comp
 				comps = dep.cpp_info.get_sorted_components().items()
 				for ref_name, cpp_info in comps:
 					use_name = self.get_use_name(ref_name, dep.ref.name)
-					print(f"\t\tcomp: {ref_name} => use_name: {use_name}")
+					# print(f"\t\tcomp: {ref_name} => use_name: {use_name}")
 					comp_depnames.append(use_name)
 					self.depmap[use_name] = {
 						'cpp_info': cpp_info,
@@ -137,10 +133,11 @@ class WafDeps(object):
 						'requires': [self.get_use_name(c, dep.ref.name) for c in cpp_info.requires],
 						'package': self.get_use_name(dep.ref.name),
 					}
+					# print("\t\t\trequires: %s" % self.depmap[use_name]['requires'])
 
 				#generate a parent "pkg::pkg"
-				use_name = self.get_use_name(dep.ref.name, dep.ref.name)
-				print(f"\tparent use_name: {use_name}")
+				use_name = self.get_use_name(dep.ref.name)
+				# print(f"\tparent use_name: {use_name}")
 				self.depmap[use_name] = {
 					'cpp_info': dep.cpp_info,
 					'usename': use_name,
@@ -149,7 +146,7 @@ class WafDeps(object):
 				}
 			else:
 				#only generate "pkg"
-				print(f"\t<no_components>")
+				# print(f"\t<no_components>")
 				use_name = self.get_use_name(dep.ref.name)
 				self.depmap[use_name] = {
 					'cpp_info': dep.cpp_info,
@@ -166,7 +163,9 @@ class WafDeps(object):
 				assert n.get('__at', 0) != i, "Cyclic dependencies!\n\tusename: %s\n\trequires: %s" % (n['usename'], n['requires'])
 				n['__at'] = i
 				for req in n['requires']:
-					assert req in self.depmap, "The following dependency for '%s' wasn't found: '%s'\n\tis the package broken, or am I broken?" % (n['usename'], req)
+					if req not in self.depmap:
+						continue
+					# assert req in self.depmap, "The following dependency for '%s' wasn't found: '%s'\n\tis the package broken, or am I broken?" % (n['usename'], req)
 					visit(self.depmap[req])
 				n['__at'] = 0
 				n['__visited'] = i
@@ -197,10 +196,14 @@ class WafDeps(object):
 		def setpath(k, v):
 			#convert relative paths from conan to absolute
 			if type(v) is list:
-				setvar(k, [os.path.abspath(p) for p in v])
+				ret = [os.path.abspath(p) for p in v]
+				setvar(k, ret)
+				return ret
 			else:
 				assert(type(v) is str)
-				setvar(k, os.path.abspath(v))
+				ret = [os.path.abspath(v)]
+				setvar(k, ret[0])
+				return ret
 		
 		libs = cpp_info.libs + cpp_info.system_libs + cpp_info.objects
 		
@@ -223,8 +226,14 @@ class WafDeps(object):
 		#Extra non-waf variables from Conan cpp_info
 		setpath("SRCPATH", cpp_info.srcdirs)
 		setpath("RESPATH", cpp_info.resdirs)
-		setpath("BINPATH", cpp_info.bindirs)
 		setpath("BUILDPATH", cpp_info.builddirs)
+		
+		#conan_load will add this to configuration context's 'PATH' so that
+		#the usual `find_program` call will find our binaries
+		abs_bindirs = setpath("BINPATH", cpp_info.bindirs)
+		if 'CONAN_BINPATH' not in out:
+			out['CONAN_BINPATH'] = set()
+		out['CONAN_BINPATH'].update(abs_bindirs)
 
 		#Unused waf variables:
 		# "ARCH"

@@ -1,0 +1,29 @@
+import os
+
+def options(opt):
+	opt.load('compiler_cxx')
+
+def configure(conf):
+	conf.load('conan', tooldir='../..')
+	conf.load_conan()
+	conf.load('compiler_cxx')
+	conf.find_program("flatc", var="FLATC", mandatory=False)
+
+	#use preconfigured wrapper from ndk for the activated target
+	conf.env.CXX=['%s%s-clang++' % (os.environ['CHOST'], os.environ['ANDROID_NATIVE_API_LEVEL'])]
+	conf.env.LINK_CXX=['%s%s-clang++' % (os.environ['CHOST'], os.environ['ANDROID_NATIVE_API_LEVEL'])]
+
+def build(bld):
+	gen_header = bld.path.get_bld().find_or_declare("generated/car_generated.h")
+	bld(
+		rule = "${FLATC} --cpp -o ${TGT[0].parent} ${SRC}",
+		source = "car.fbs",
+		target = gen_header
+	)
+	bld(
+		features = "cxx cxxshlib conan",
+		source = "mylib.cpp",
+		includes = gen_header.parent.abspath(),
+		use = "flatbuffers",
+		target = "mylib"
+	)
