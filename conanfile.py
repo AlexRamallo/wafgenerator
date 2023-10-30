@@ -2,8 +2,10 @@ import os, json
 from conan import ConanFile
 from conan.tools.files import copy
 
-from wafgenerator.WafDeps import WafDeps
-from wafgenerator.WafToolchain import WafToolchain
+try:
+    from extensions.generators.Waf import Waf
+except ModuleNotFoundError:
+    from Waf import Waf
 
 class WafGenerator(ConanFile):
     name = "wafgenerator"
@@ -12,4 +14,6 @@ class WafGenerator(ConanFile):
     description = "A Conan generator for waf"
     license = "MIT"
     package_type = "python-require"
-    exports = ["wafgenerator/*"]
+    
+    def export(self):
+        copy(self, 'extensions/generators/*', self.recipe_folder, self.export_folder, keep_path=False)

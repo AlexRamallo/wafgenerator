@@ -56,7 +56,7 @@ def expand_conan_targets(tg):
 	"""
 	uselist = Utils.to_list(getattr(tg, 'use', []))
 	for usename in uselist:
-		if f'CONAN_USE_{usename}' in tg.env:
+		if (f'CONAN_USE_{usename}' in tg.env):
 			deps = tg.env[f'CONAN_USE_{usename}']
 		else:
 			continue
@@ -68,31 +68,30 @@ def load_conan(
 		conf,
 		env = None,
 		conan_deps = None,
-		conan_toolchain = None,
 		
-		#apply compiler flags to the environment based on Conan toolchain. This
+		#apply compiler flags to the environment based on Conan profile. This
 		#includes flags for build_type, cppstd, runtime library, etc. Unless
 		#you have a very good reason, this should always be enabled.
 		apply_flags = True
 	):
 	if not env:
 		env = conf.env
+
 	if not conan_deps:
-		conan_deps = conf.path.get_bld().find_node("conan_dependencies.py")
-	if not conan_toolchain:
-		conan_toolchain = conf.path.get_bld().find_node("conan_toolchain.py")
-
+		conan_deps = conf.path.get_bld().find_node('conan_waf_config.py')
+	
 	env.load(str(conan_deps))
-	env.load(str(conan_toolchain))
 
-	import os
-	conf.environ['PATH'] = os.pathsep.join((
-		conf.environ.get('PATH', ''),
-		os.pathsep.join(env['CONAN_BINPATH'])
-	))
+	#add build profile bindirs to env path for `find_program` to work
+	if env['CONAN_BUILD_BIN_PATH']:
+		import os
+		conf.environ['PATH'] = os.pathsep.join((
+			conf.environ.get('PATH', ''),
+			os.pathsep.join(env['CONAN_BUILD_BIN_PATH'])
+		))
 
 	for p in env['ALL_CONAN_PACKAGES']:
-		conf.msg("Conan usename", p)
+		conf.msg('Conan usename', p)
 
 	if apply_flags:
 		_apply_settings_flags(conf, env)
@@ -106,10 +105,47 @@ def load_conan(
 		s('CXXFLAGS')
 		s('LINKFLAGS')
 
-	#The following adds the toolchain compiler name to the front of that
-	#c_config search list(s). This activates the auto-detection feature for the
-	#compiler name. Names are the names of waf tools (see waflib/Tools and
-	#waflib/extras for available compilers, e.g. "clangcxx.py")
+def _apply_settings_flags(conf, env):
+	_apply_arch(conf, env)
+	_apply_os(conf, env)
+	_apply_compiler(conf, env)
+	_apply_cppstd(conf, env)
+	_apply_build_type(conf, env)
+
+def _apply_compiler(conf, env):
+	settings = env.CONAN_SETTINGS
+	compiler = settings.get('compiler', None)
+	if compiler == None:
+		return
+	libcxx = settings.get('compiler.libcxx')
+	runtime = settings.get('compiler.runtime')
+	runtime_type = settings.get('compiler.runtime_type')
+	threads = settings.get('compiler.threads')
+	exception = settings.get('compiler.exception')
+
+	if threads or exception:
+		warn(f'WARNING: MinGW flags not handled yet!!')
+
+	#GCC libstd ABI
+	if libcxx == 'libstdc++':
+		env.append_value('CXXFLAGS', '-D_GLIBCXX_USE_CXX11_ABI=0')
+	elif libcxx == 'libstdc++11':
+		env.append_value('CXXFLAGS', '-D_GLIBCXX_USE_CXX11_ABI=1')
+
+	#Windows CRT
+	if runtime and runtime_type:
+		flag = 'M' + ('D' if runtime == 'dynamic' else 'T')
+		if runtime_type == 'Debug':
+			flag += 'd'
+		env.append_value('CXXFLAGS', f'/{flag}')
+
+	_override_default_compiler_selection(conf)
+
+def _override_default_compiler_selection(conf):
+	#The following adds the compiler name to the front of that c_config search
+	#list(s). This activates the auto-detection feature for the compiler name.
+	#Names are the names of waf tools (see waflib/Tools and waflib/extras for
+	#available compilers, e.g. "clangcxx.py")
 
 	#If a compiler isn't supported, they can be configured manually with env
 	#variables, like [CC,CXX,AR,etc]. tool_requires packages with compilers can
@@ -140,73 +176,41 @@ def load_conan(
 		c_compiler[os].insert(0, cc)
 
 	#MSVC version and targets
-	if compiler_name == "msvc":
+	if compiler_name == 'msvc':
 		#src: https://blog.knatten.org/2022/08/26/microsoft-c-versions-explained
 		version = settings['compiler.version']
-		msvc_ver = f"{version[:1]}.{version[-1]}"
-		env['MSVC_VERSIONS'] = [f"msvc {msvc_ver}"]
+		msvc_ver = f'{version[:1]}.{version[-1]}'
+		env['MSVC_VERSIONS'] = [f'msvc {msvc_ver}']
 		env['MSVC_TARGETS'] = [env.CONAN_SETTINGS['arch']]
-
-def _apply_settings_flags(conf, env):
-	_apply_arch(conf, env)
-	_apply_os(conf, env)
-	_apply_compiler(conf, env)
-	_apply_cppstd(conf, env)
-	_apply_build_type(conf, env)
-
-def _apply_compiler(conf, env):
-	settings = env.CONAN_SETTINGS
-	compiler = settings.get("compiler")
-	libcxx = settings.get("compiler.libcxx")
-	runtime = settings.get("compiler.runtime")
-	runtime_type = settings.get("compiler.runtime_type")
-	threads = settings.get("compiler.threads")
-	exception = settings.get("compiler.exception")
-
-	if threads or exception:
-		warn(f"WARNING: MinGW flags not handled yet!!")
-
-	#GCC libstd ABI
-	if libcxx == "libstdc++":
-		env.append_value("CXXFLAGS", "-D_GLIBCXX_USE_CXX11_ABI=0")
-	elif libcxx == "libstdc++11":
-		env.append_value("CXXFLAGS", "-D_GLIBCXX_USE_CXX11_ABI=1")
-
-	#Windows CRT
-	if runtime and runtime_type:
-		flag = "M" + ("D" if runtime == "dynamic" else "T")
-		if runtime_type == "Debug":
-			flag += "d"
-		env.append_value("CXXFLAGS", f"/{flag}")
 
 
 def _apply_cppstd(conf, env):
-	if 'compiler.cppstd' not in env.CONAN_SETTINGS:
+	cppstd = env.CONAN_SETTINGS.get('compiler.cppstd', None)
+	if cppstd == None:
 		return
 
-	cppstd = env.CONAN_SETTINGS['compiler.cppstd']
 	compiler = env.CONAN_SETTINGS['compiler']
 
 	flags = {
-		"gcc": {
-			"98": 		["--std", "c++98"],
-			"gnu98": 	["--std", "gnu++98"],
-			"11":		["--std", "c++11"],
-			"gnu11":	["--std", "gnu++11"],
-			"14":		["--std", "c++14"],
-			"gnu14":	["--std", "gnu++14"],
-			"17":		["--std", "c++17"],
-			"gnu17":	["--std", "gnu++17"],
-			"20":		["--std", "c++20"],
-			"gnu20":	["--std", "gnu++20"],
-			"23":		["--std", "c++23"],
-			"gnu23":	["--std", "gnu++23"],
+		'gcc': {
+			'98': 		['--std', 'c++98'],
+			'gnu98': 	['--std', 'gnu++98'],
+			'11':		['--std', 'c++11'],
+			'gnu11':	['--std', 'gnu++11'],
+			'14':		['--std', 'c++14'],
+			'gnu14':	['--std', 'gnu++14'],
+			'17':		['--std', 'c++17'],
+			'gnu17':	['--std', 'gnu++17'],
+			'20':		['--std', 'c++20'],
+			'gnu20':	['--std', 'gnu++20'],
+			'23':		['--std', 'c++23'],
+			'gnu23':	['--std', 'gnu++23'],
 		},
-		"msvc": {
-			"14": 		["/std:c++14"],
-			"17": 		["/std:c++17"],
-			"20": 		["/std:c++20"],
-			"23": 		["/std:latest"]
+		'msvc': {
+			'14': 		['/std:c++14'],
+			'17': 		['/std:c++17'],
+			'20': 		['/std:c++20'],
+			'23': 		['/std:latest']
 		},
 	}
 	if compiler not in flags:
@@ -215,75 +219,95 @@ def _apply_cppstd(conf, env):
 	else:
 		env.append_value('CXXFLAGS', flags[compiler][cppstd])
 
+def _detect_default_waf_compiler_cxx(conf):
+	#return the same result as waf's default compiler detect logic
+
+	if conf.env._conan_waf_detected_default_cxx:
+		return conf.env._conan_waf_detected_default_cxx
+
+	from waflib.Tools import compiler_cxx
+	
+	try:
+		conf.options.check_cxx_compiler
+	except AttributeError:
+		setattr(conf.options, 'check_cxx_compiler', None)
+
+	conf.env.stash()
+	compiler_cxx.configure(conf)
+	ret = conf.env.COMPILER_CXX
+	conf.env.revert()
+	conf.env._conan_waf_detected_default_cxx = ret
+	return ret
 
 def _apply_build_type(conf, env):
-	if 'build_type' not in env.CONAN_SETTINGS:
+	build_type = env.CONAN_SETTINGS.get('build_type', None)
+	if build_type == None:
 		return
 
-	build_type = env.CONAN_SETTINGS['build_type']
-
-	os = env.CONAN_SETTINGS['os']
-	compiler = env.CONAN_SETTINGS['compiler']
+	os = env.CONAN_SETTINGS.get('os', '')
+	compiler = env.CONAN_SETTINGS.get('compiler', None)
+	if compiler == None:
+		_detect_default_waf_compiler_cxx(conf)
 
 	cxxflags = []
 	linkflags = []
 
-	if compiler == "msvc" or ("Windows" in os and compiler == "clang"):
+	if compiler == 'msvc' or ('Windows' in os and compiler == 'clang'):
 		if build_type == 'Debug':
 			cxxflags.extend([
-				"/Zi",		#generate PDBs
-				"/Od",  	#disable optimizations
+				'/Zi',		#generate PDBs
+				'/Od',  	#disable optimizations
 			])
 			linkflags.extend([
-				"/debug"
+				'/debug'
 			])
 		elif build_type == 'Release':
 			cxxflags.extend([
-				"/O2",		#optimize speed
-				"/DNDEBUG"
+				'/O2',		#optimize speed
+				'/DNDEBUG'
 			])
 			linkflags.extend([
-				"/incremental:no" #smaller output, functionally equivalent
+				'/incremental:no' #smaller output, functionally equivalent
 			])
 		elif build_type == 'RelWithDebInfo':
 			cxxflags.extend([
-				"/Zi",
-				"/O2",
-				"/DNDEBUG"
+				'/Zi',
+				'/O2',
+				'/DNDEBUG'
 			])
 			linkflags.extend([
-				"/debug"
+				'/debug'
 			])
 		elif build_type == 'MinSizeRel':
 			cxxflags.extend([
-				"/O1",		#optimize size
-				"/DNDEBUG"
+				'/O1',		#optimize size
+				'/DNDEBUG'
 			])
 			linkflags.extend([
-				"/incremental:no"
+				'/incremental:no'
 			])
 	else:
 		#Use GCC flags for everything else
 		if build_type == 'Debug':
 			cxxflags.extend([
-				"-g",			#enable debug symbols
-				"-O0",			#disable optimizations
+				'-g',			#enable debug symbols
+				'-O0',			#disable optimizations
 			])
 		elif build_type == 'Release':
 			cxxflags.extend([
-				"-O3",			#optimize speed
-				"-DNDEBUG",
+				'-O3',			#optimize speed
+				'-DNDEBUG',
 			])
 		elif build_type == 'RelWithDebInfo':
 			cxxflags.extend([
-				"-g",
-				"-O2",
-				"-DNDEBUG",
+				'-g',
+				'-O2',
+				'-DNDEBUG',
 			])
 		elif build_type == 'MinSizeRel':
 			cxxflags.extend([
-				"-Os",			#optimize size
-				"-DNDEBUG",
+				'-Os',			#optimize size
+				'-DNDEBUG',
 			])
 
 	env.append_value('CXXFLAGS', cxxflags)
@@ -294,30 +318,37 @@ def _apply_os(conf, env):
 	#first, then fallback to just using the conan name directly
 	settings = env.CONAN_SETTINGS
 	
-	os = settings['os']
-	if os == "Macos":
-		os = "darwin"
-	elif os == "Windows":
-		os = "win32"
+	os = settings.get('os', None)
+	if os == None:
+		return
+
+	if os == 'Macos':
+		os = 'darwin'
+	elif os == 'Windows':
+		os = 'win32'
 	else:
 		os = os.lower()
 	env['DEST_OS'] = os
 
-	version = settings.get("os.version")
+	version = settings.get('os.version')
 	if version:
 		env['DEST_OS_VERSION'] = version
 
-	if os == "win32" and settings.get("os.subsystem"):
-		env['WINDOWS_SUBSYSTEM'] = settings["os.subsystem"]
+	if os == 'win32' and settings.get('os.subsystem'):
+		env['WINDOWS_SUBSYSTEM'] = settings['os.subsystem']
 
-	if os == "android":
+	if os == 'android':
 		env['ANDROID_MINSDKVERSION'] = settings.get('os.api_level')
 
-	if os in ["ios", "tvos", "watchos"]:
+	if os in ['ios', 'tvos', 'watchos']:
 		env['IOS_SDK_NAME'] = settings['os.sdk']
 		env['IOS_SDK_MINVER'] = settings.get('os.sdk_version')
 
 def _apply_arch(conf, env):
+	arch = env.CONAN_SETTINGS.get('arch', None)
+	if arch == None:
+		return
+
 	#based on Conan settings.yml + `walib.Tools.c_config.MACRO_TO_DEST_CPU`
 	#note the original conan arch can be found in the 'CONAN_SETTINGS' key
 	archmap = {
@@ -389,7 +420,6 @@ def _apply_arch(conf, env):
 		# asm.js
 		# wasm
 	}
-	arch = env.CONAN_SETTINGS.get('arch')
 	found = None
 	for wafname in archmap:
 		if arch in archmap[wafname]:

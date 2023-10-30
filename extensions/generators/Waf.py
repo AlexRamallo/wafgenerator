@@ -1,44 +1,10 @@
 """
 This generates data in a format fed into the `conan` waf tool
-
-Dependencies in waf are implemented with "use" names. The built-in C++ task
-generators accept compiler flags and linker inputs using a special naming
-convention for environment variables along with the `use` attribute.
-
-Example:
-
-```py
-	bld(
-		features = "cxx cxxprogram",
-		source = "source/main.cpp",
-		use = "openssl"
-	)
-```
-
-Since "openssl" is in the `use` attribute, the `cxx` (compiler) and
-`cxxprogram` (linker) tasks will search the current waf environment (not system
-environment) for variables like these:
-
-* LIB_openssl
-* CXXFLAGS_openssl
-* INCLUDES_openssl
-* etc...
-
-The full list is at https://waf.io/book/#_foreign_libraries_and_flags (Table 1)
-
-So this generator's job is simply to generate those environment variables for
-all Conan dependencies
-
-Intended use:
-
-```py
-def configure(conf):
-	conf.env.load("build/conanbuildinfo.py")
-```
 """
 import os
 from conan.internal import check_duplicated_generator
 from conans.util.files import save
+
 
 def serialize_configset(data):
 	#Emulate waf's ConfigSet serialization format, since this makes it
@@ -55,9 +21,10 @@ def serialize_configset(data):
 	return ''.join(buf)
 
 
-class WafDeps(object):
+class Waf(object):
 	def __init__(self, conanfile):
 		self.conanfile = conanfile
+
 
 	def get_use_name(self, ref_name, parent_ref = None):
 		"""
@@ -80,22 +47,33 @@ class WafDeps(object):
 			ref_name = f'{parent_ref}_{ref_name}'
 		return ref_name.replace('-', '_')
 
+
 	def generate(self):
 		check_duplicated_generator(self, self.conanfile)
 
 		#serialized waflib.ConfigSet file, which can be loaded by wscript
 		filename = os.path.join(
 			self.conanfile.generators_folder,
-			"conan_dependencies.py"
+			"conan_waf_config.py"
 		)
 
-		deps = self.gen_deps()
+		output = self.gen_deps()
 
-		generator_files = {filename: serialize_configset(deps)}
+		#add settings, which will be interpreted and applied at configuration time
+		settings = self.conanfile.settings.serialize()
+		output.update({
+			"CONAN_SETTINGS": settings,
+			#paths that should be added to sys.path (only waf tools currently)
+			"DEP_SYS_PATHS": self._get_waftools_paths(),
+			#global Conan config/flags
+			"CONAN_CONFIG": self._get_conan_config()
+		})
+
+		generator_files = {filename: serialize_configset(output)}
 
 		for generator_file, content in generator_files.items():
 			save(generator_file, content)
-		
+
 
 	def gen_usedeps(self):
 		"""
@@ -110,35 +88,39 @@ class WafDeps(object):
 			if dep.has_components:
 				comp_deps = list(reversed(dep.cpp_info.get_sorted_components()))
 
+
 	def gen_deps(self):
 		out = {
 			"ALL_CONAN_PACKAGES": [],
+			"ALL_CONAN_PACKAGES_BUILD": [],
 		}
-		self.depmap = {}
+		depmap_host = {}
+		depmap_build = {}
 
-		for req, dep in self.conanfile.dependencies.host.items():
+		for req, dep in self.conanfile.dependencies.items():
 			# print(dep.ref, f", direct={req.direct}, build={req.build}")
+			depmap = depmap_build if req.build else depmap_host
+
 			if dep.cpp_info.has_components:
-				# print("\t<has components>")
 				comp_depnames = []
 				#generate "pkg::comp" for each comp
 				comps = dep.cpp_info.get_sorted_components().items()
 				for ref_name, cpp_info in comps:
 					use_name = self.get_use_name(ref_name, dep.ref.name)
-					# print(f"\t\tcomp: {ref_name} => use_name: {use_name}")
 					comp_depnames.append(use_name)
-					self.depmap[use_name] = {
+					depmap[use_name] = {
+						'build': req.build,
 						'cpp_info': cpp_info,
 						'usename': use_name,
 						'requires': [self.get_use_name(c, dep.ref.name) for c in cpp_info.requires],
 						'package': self.get_use_name(dep.ref.name),
 					}
-					# print("\t\t\trequires: %s" % self.depmap[use_name]['requires'])
 
 				#generate a parent "pkg::pkg"
 				use_name = self.get_use_name(dep.ref.name)
 				# print(f"\tparent use_name: {use_name}")
-				self.depmap[use_name] = {
+				depmap[use_name] = {
+					'build': req.build,
 					'cpp_info': dep.cpp_info,
 					'usename': use_name,
 					'requires': comp_depnames,
@@ -148,14 +130,16 @@ class WafDeps(object):
 				#only generate "pkg"
 				# print(f"\t<no_components>")
 				use_name = self.get_use_name(dep.ref.name)
-				self.depmap[use_name] = {
+				depmap[use_name] = {
+					'build': req.build,
 					'cpp_info': dep.cpp_info,
 					'usename': use_name,
 					'requires': [self.get_use_name(c, dep.ref.name) for c in dep.cpp_info.requires],
 					'package': use_name
 				}
 
-		def toposort_deps(self, root, i):
+
+		def toposort_deps(self, depmap, root, i):
 			out = []
 			def visit(n):
 				if n.get('__visited', 0) == i:
@@ -163,10 +147,10 @@ class WafDeps(object):
 				assert n.get('__at', 0) != i, "Cyclic dependencies!\n\tusename: %s\n\trequires: %s" % (n['usename'], n['requires'])
 				n['__at'] = i
 				for req in n['requires']:
-					if req not in self.depmap:
+					if req not in depmap:
 						continue
-					# assert req in self.depmap, "The following dependency for '%s' wasn't found: '%s'\n\tis the package broken, or am I broken?" % (n['usename'], req)
-					visit(self.depmap[req])
+					# assert req in depmap, "The following dependency for '%s' wasn't found: '%s'\n\tis the package broken, or am I broken?" % (n['usename'], req)
+					visit(depmap[req])
 				n['__at'] = 0
 				n['__visited'] = i
 				out.append(n)
@@ -174,21 +158,29 @@ class WafDeps(object):
 			return out
 
 		sortit = 0
-		for name, info in self.depmap.items():
+
+		#generate host dep info (includes, flags, etc)
+		for name, info in depmap_host.items():
 			sortit += 1
-			# print(f"toposort {name}\n\trequires: %s" % info['requires'])
-			sorted_deps = toposort_deps(self, info, sortit)
+			sorted_deps = toposort_deps(self, depmap_host, info, sortit)
+			info['use'] = list(reversed(sorted_deps))
+			self.proc_cpp_info(info, out)
+
+		#collect bindirs
+		for name, info in depmap_build.items():
+			sortit += 1
+			sorted_deps = toposort_deps(self, depmap_build, info, sortit)
 			info['use'] = list(reversed(sorted_deps))
 			self.proc_cpp_info(info, out)
 
 		return out
+
 
 	def proc_cpp_info(self, depinfo, out):
 		name = depinfo['usename']
 		pkg_name = depinfo['package']
 		cpp_info = depinfo['cpp_info']
 
-		out["ALL_CONAN_PACKAGES"].append(name)
 		def setvar(k, v):
 			if v:
 				out[f"{k}_{name}"] = v
@@ -200,11 +192,33 @@ class WafDeps(object):
 				setvar(k, ret)
 				return ret
 			else:
-				assert(type(v) is str)
+				assert type(v) is str
 				ret = [os.path.abspath(v)]
 				setvar(k, ret[0])
 				return ret
-		
+
+		if depinfo['build']:			
+			#add 'build_' prefix to all usenames for build items
+			#avoids name conflicts while making build graph available in scripts
+			name = f'build_{name}'
+
+			out["ALL_CONAN_PACKAGES_BUILD"].append(name)
+			#CONAN_USE is used by waftool to expand deps for usenames
+
+			setvar('CONAN_USE', ['build_%s' % d['usename'] for d in depinfo['use']])
+
+			#process build dependencies
+			abs_bindirs = setpath("BINPATH", cpp_info.bindirs)
+			if 'CONAN_BUILD_BIN_PATH' not in out:
+				out['CONAN_BUILD_BIN_PATH'] = set()
+			out['CONAN_BUILD_BIN_PATH'].update(abs_bindirs)
+		else:
+			#process host dependencies
+			out["ALL_CONAN_PACKAGES"].append(name)
+			
+			#CONAN_USE is used by waftool to expand deps for usenames
+			setvar('CONAN_USE', [d['usename'] for d in depinfo['use']])
+
 		libs = cpp_info.libs + cpp_info.system_libs + cpp_info.objects
 		
 		#warning: default waf C/C++ tasks don't distinguish between exelink and
@@ -227,13 +241,7 @@ class WafDeps(object):
 		setpath("SRCPATH", cpp_info.srcdirs)
 		setpath("RESPATH", cpp_info.resdirs)
 		setpath("BUILDPATH", cpp_info.builddirs)
-		
-		#conan_load will add this to configuration context's 'PATH' so that
-		#the usual `find_program` call will find our binaries
-		abs_bindirs = setpath("BINPATH", cpp_info.bindirs)
-		if 'CONAN_BINPATH' not in out:
-			out['CONAN_BINPATH'] = set()
-		out['CONAN_BINPATH'].update(abs_bindirs)
+		setpath("BINPATH", cpp_info.bindirs)
 
 		#Unused waf variables:
 		# "ARCH"
@@ -243,5 +251,42 @@ class WafDeps(object):
 		# "RPATH"
 		# "CPPFLAGS"
 
-		#CONAN_USE is used by waftool to expand deps for usenames
-		setvar('CONAN_USE', [d['usename'] for d in depinfo['use']])
+
+	def _get_conan_config(self):
+		conf_info = self.conanfile.conf
+		out = {
+			"CFLAGS": conf_info.get('tools.build:cflags', [], check_type=list),
+			
+			"CXXFLAGS": conf_info.get('tools.build:cxxflags', [], check_type=list),
+			
+			"DEFINES": conf_info.get('tools.build:defines', [], check_type=list),
+			
+			"LINKFLAGS":
+				conf_info.get('tools.build:exelinkflags', [], check_type=list) +
+				conf_info.get('tools.build:sharedlinkflags', [], check_type=list),
+		}
+		return out
+
+
+	def _get_waftools_paths(self):
+		#enables distributing waf tools inside of conan packages
+		#e.g. add a waf tool to the 'flatbuffers' package so that you can use
+		#the flatc compiler from wscripts, and not worry about versioning
+		out = []
+		for require, dependency in self.conanfile.dependencies.items():
+			if not require.build:
+				continue #only find waf tools from build environment
+			envvars = dependency.buildenv_info.vars(self.conanfile, scope="build")
+			if "WAF_TOOLS" not in envvars.keys():
+				continue
+
+			tools = envvars["WAF_TOOLS"].split(" ")
+			for entry in tools:
+				if not os.path.exists(entry):
+					self.outputs.warn(f"Waf tool entry not found: {entry}")
+					continue
+				if os.path.isfile(entry):
+					out.append(os.sep.join(entry.split(os.sep)[:-1]))
+				else:
+					out.append(entry)
+		return out
