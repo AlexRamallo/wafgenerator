@@ -2,8 +2,7 @@ def options(opt):
 	opt.load('compiler_cxx')
 
 def configure(conf):
-	conf.load('conan', tooldir='../..')
-	conf.load_conan()
+	conf.load('conan_deps', tooldir='build')
 	conf.load('compiler_cxx')
 
 	#flatc will be found in conan cache
