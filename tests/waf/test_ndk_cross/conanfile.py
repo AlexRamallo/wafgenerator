@@ -4,7 +4,6 @@ from conan.tools.files import copy
 
 class WafConanTestProjectNDK(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
-    python_requires = "wafgenerator/0.1"
     requires = ["flatbuffers/23.5.26"]
     build_requires = ["flatbuffers/23.5.26"]
 

@@ -25,7 +25,9 @@ class Waf(object):
                 ref_name = '_'.join(sp)
         elif parent_ref:
             ref_name = f'{parent_ref}_{ref_name}'
-        return ref_name.replace('-', '_')
+        return ref_name \
+            .replace('-', '_') \
+            .replace('+','p') #"flac::libflac++" -> "flac_libflacpp"
 
     def generate(self):
         check_duplicated_generator(self, self.conanfile)

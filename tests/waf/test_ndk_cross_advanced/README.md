@@ -41,8 +41,8 @@ The following variants are available for this demo:
 * `x86_64_debug`
 * `x86_64_release`
 
-To run it, append the variant to the command, such as `configure_arm32_debug`,
-`clean_arm32_debug`, etc. The available commands are:
+To run it, append the variant to the command, such as `configure_x86_debug`,
+`clean_x86_debug`, etc. The available commands are:
 
 * `configure`
 * `build`

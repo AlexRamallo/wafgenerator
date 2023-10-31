@@ -6,8 +6,6 @@ class WafConanTestProject(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     requires = "spdlog/1.12.0"
 
-    default_options = {'*/*:shared': True}
-
     generators = ['Waf']
     # python_requires = "wafgenerator/0.1"
     # def generate(self):
