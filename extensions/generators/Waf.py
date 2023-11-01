@@ -36,6 +36,7 @@ class Waf(object):
 
         #add settings, which will be interpreted and applied at configuration time
         settings = self.conanfile.settings.serialize()
+        print(settings)
         output.update({
             "CONAN_SETTINGS": settings,
             #paths that should be added to sys.path (only waf tools currently)
@@ -595,9 +596,11 @@ def _override_default_compiler_selection(conf, env):
     compiler_name = env.CONAN_SETTINGS['compiler']
     (cxx, cc) = compile_name_map[compiler_name]
 
-    os = env.DEST_OS
+    os = Utils.unversioned_sys_platform() # waf uses build os for compiler detection
     if cxx and os in cxx_compiler:
         cxx_compiler[os].insert(0, cxx)
+    else:
+        assert 0, f"cxx: {cxx}, os: {os}"
     
     if cc and os in c_compiler:
         c_compiler[os].insert(0, cc)
@@ -605,10 +608,25 @@ def _override_default_compiler_selection(conf, env):
     # MSVC version and targets
     if compiler_name == 'msvc':
         # src: https://blog.knatten.org/2022/08/26/microsoft-c-versions-explained
-        version = settings['compiler.version']
-        msvc_ver = f'{version[:1]}.{version[-1]}'
-        env['MSVC_VERSIONS'] = [f'msvc {msvc_ver}']
-        env['MSVC_TARGETS'] = [env.CONAN_SETTINGS['arch']]
+        # and: https://en.wikipedia.org/wiki/Microsoft_Visual_C++#Internal_version_numbering
+        version = str(env.CONAN_SETTINGS['compiler.version'])
+        msvc_vermap = {
+            '170': 11,
+            '180': 12,
+            '190': 14,
+            '191': 15,
+            '192': 16,
+            '193': 17,
+        }
+        arch = env.CONAN_SETTINGS['arch']
+        if arch == 'x86_64':
+            arch = 'x64'
+        elif arch in ['armv4', 'armv4i', 'armv5el', 'armv5hf', 'armv6', 'armv7', 'armv7hf', 'armv7s', 'armv7k']:
+            arch = 'arm'
+        elif arch.startswith('arm'):
+            arch = 'arm64'
+        env['MSVC_VERSIONS'] = [f'msvc {msvc_vermap[version]}']
+        env['MSVC_TARGETS'] = [arch]
 
 def _apply_cppstd(conf, env):
     cppstd = env.CONAN_SETTINGS.get('compiler.cppstd', None)
@@ -658,7 +676,7 @@ def _apply_build_type(conf, env):
     cxxflags = []
     linkflags = []
 
-    if compiler == 'msvc' or ('Windows' in os and compiler == 'clang'):
+    if compiler == 'msvc':
         if build_type == 'Debug':
             cxxflags.extend([
                 '/Zi',      # generate PDBs

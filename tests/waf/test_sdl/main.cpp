@@ -3,13 +3,17 @@
 // This should display a white screen for 2 seconds
 // compile with: clang++ main.cpp -o hello_sdl2 -lSDL2
 // run with: ./hello_sdl2
+#define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #include <stdio.h>
 
 #define SCREEN_WIDTH 640
 #define SCREEN_HEIGHT 480
 
-int main(int argc, char* args[]) {
+#ifdef __cplusplus
+extern "C"
+#endif
+int main(int argc, char *argv[]){
   SDL_Window* window = NULL;
   SDL_Surface* screenSurface = NULL;
   if (SDL_Init(SDL_INIT_VIDEO) < 0) {

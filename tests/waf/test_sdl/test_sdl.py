@@ -33,4 +33,4 @@ def test_waf_sdl():
     run("conan install . -of=build --build=missing")
     run(f"{sys.executable} ../waf configure build -v")
     dir_list = os.listdir('build')
-    assert 'app' in dir_list
+    assert 'app' in dir_list or 'app.exe' in dir_list
