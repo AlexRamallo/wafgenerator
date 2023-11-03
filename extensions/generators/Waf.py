@@ -67,8 +67,8 @@ class Waf(object):
             syspaths.append(f'"{p}",')
 
         save(filename, waftool_src_template % (
+            'sys.path = [\n    %s\n]+sys.path' % '\n    '.join(syspaths),
             '\n    '.join(deps),
-            'sys.path = [\n    %s\n    ]+sys.path' % '\n    '.join(syspaths)
         ))
 
     def gen_usedeps(self):
@@ -295,9 +295,11 @@ class Waf(object):
                 if not os.path.exists(entry):
                     self.outputs.warn(f"Waf tool entry not found: {entry}")
                     continue
+                
                 if os.path.isfile(entry):
-                    out.append(os.sep.join(entry.split(os.sep)[:-1]))
-                else:
+                    entry = os.sep.join(entry.split(os.sep)[:-1])
+                
+                if entry not in out:
                     out.append(entry)
         return out
 
@@ -448,13 +450,13 @@ from waflib.Tools.compiler_c import c_compiler
 from waflib.Tools.compiler_cxx import cxx_compiler
 from waflib.TaskGen import feature, before_method
 
+#---------------------python sys paths from dependencies-----------------------#
+# ex: conf.load('some_tool', with_sys_path=True)
+%s
+#------------------------------------------------------------------------------#
+
 def configure(conf):
     #-------------------configuration info from dependencies-------------------#
-    %s
-    #--------------------------------------------------------------------------#
-
-    #-------------------python sys paths from dependencies---------------------#
-    # ex: conf.load('some_tool', with_sys_path=True)
     %s
     #--------------------------------------------------------------------------#
 
