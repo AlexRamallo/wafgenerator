@@ -93,3 +93,26 @@ class MyPackage(ConanFile):
         gen = self.python_requires["wafgenerator"].module.Waf(self)
         gen.generate()
 ```
+
+## Installation (method 3)
+
+Thanks to [John Freeman's Redirectory](https://github.com/thejohnfreeman/redirectory)
+project, there's a new way to use this. You can either host your own instance of
+a redirectory server, or use his graciously provided public instance:
+
+```
+conan remote add redirectory https://conan.jfreeman.dev
+```
+
+Then just use the `<package>/<version>@github/<github-username>` format to refer
+to packages hosted as Github releases instead of Conan Center.
+
+For example:
+
+```py
+class MyPackage(ConanFile):
+    python_requires = "wafgenerator/0.1.1@github/alexramallo"
+    def generate(self):
+        gen = self.python_requires["wafgenerator"].module.Waf(self)
+        gen.generate()
+```
