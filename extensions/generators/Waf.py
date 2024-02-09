@@ -36,7 +36,7 @@ class Waf(object):
 
         #add settings, which will be interpreted and applied at configuration time
         settings = self.conanfile.settings.serialize()
-        print(settings)
+
         output.update({
             "CONAN_SETTINGS": settings,
             #paths that should be added to sys.path (only waf tools currently)
@@ -175,7 +175,7 @@ class Waf(object):
             #add buildenv info
             buildenv.update(info['buildenv_info'].vars(self.conanfile, scope="build"))
 
-        buildenv['PATH'] = os.pathsep.join(out.get('CONAN_BUILD_BIN_PATH', set()) | {'$PATH'})
+        buildenv['PATH'] = os.pathsep.join(list(out.get('CONAN_BUILD_BIN_PATH', set())) + ['$PATH'])
         buildenv['LD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_BUILD_LIB_PATH', set()))
         buildenv['DYLD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_BUILD_LIB_PATH', set()))
 
@@ -637,7 +637,24 @@ def _apply_cppstd(conf, env):
 
     compiler = env.CONAN_SETTINGS['compiler']
 
+    if env.CONAN_SETTINGS['os'] == 'Emscripten':
+        compiler = 'em++'
+
     flags = {
+        'em++': {
+            '98':       ['-std=c++98'],
+            'gnu98':    ['-std=gnu++98'],
+            '11':       ['-std=c++11'],
+            'gnu11':    ['-std=gnu++11'],
+            '14':       ['-std=c++14'],
+            'gnu14':    ['-std=gnu++14'],
+            '17':       ['-std=c++17'],
+            'gnu17':    ['-std=gnu++17'],
+            '20':       ['-std=c++20'],
+            'gnu20':    ['-std=gnu++20'],
+            '23':       ['-std=c++23'],
+            'gnu23':    ['-std=gnu++23'],
+        },
         'gcc': {
             '98':       ['--std', 'c++98'],
             'gnu98':    ['--std', 'gnu++98'],

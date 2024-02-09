@@ -13,7 +13,7 @@ class WafConanTestProjectFlatbuffers(ConanFile):
     tool_requires = "flatbuffers/23.5.26"
 
     generators = ['Waf']
-    # python_requires = "wafgenerator/0.1"
+    # python_requires = "wafgenerator/0.1.1@github/alexramallo"
     # def generate(self):
     #     gen = self.python_requires["wafgenerator"].module.Waf(self)
     #     gen.generate()
