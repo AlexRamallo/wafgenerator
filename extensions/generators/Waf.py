@@ -345,12 +345,22 @@ def set_conan_to_waf_compiler(settings, env):
         warn(f'WARNING: MinGW flags not handled yet!!')
 
     env['CXXFLAGS'] = env.get('CXXFLAGS', [])
+    env['LINKFLAGS'] = env.get('LINKFLAGS', [])
 
-    #GCC libstd ABI
+    # https://gcc.gnu.org/onlinedocs/libstdc++/manual/using_dual_abi.html
     if libcxx == 'libstdc++':
         env['CXXFLAGS'].append('-D_GLIBCXX_USE_CXX11_ABI=0')
     elif libcxx == 'libstdc++11':
         env['CXXFLAGS'].append('-D_GLIBCXX_USE_CXX11_ABI=1')
+    elif libcxx == 'libc++':
+        # https://libcxx.llvm.org/UsingLibcxx.html
+        env['CXXFLAGS'].append('-stdlib=libc++')
+        env['LINKFLAGS'].append('-stdlib=libc++')
+    elif libcxx == 'c++_static':
+        # https://developer.android.com/ndk/guides/cpp-support#use_clang_directly
+        env['LINKFLAGS'].append('-static-libstdc++')
+    elif libcxx == 'c++_shared':
+        pass #android clang uses shared version by default
 
     #Windows CRT
     if runtime and runtime_type:
