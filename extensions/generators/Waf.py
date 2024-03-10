@@ -38,6 +38,7 @@ class Waf(object):
         settings = self.conanfile.settings.serialize()
 
         output.update({
+            #these are host settings
             "CONAN_SETTINGS": settings,
             #paths that should be added to sys.path (only waf tools currently)
             "DEP_SYS_PATHS": self._get_waftools_paths(),
