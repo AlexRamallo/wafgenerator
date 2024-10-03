@@ -65,7 +65,7 @@ class Waf(object):
         #python syspath from deps (for distributing waf tools as conan packages)
         syspaths = []
         for p in output['DEP_SYS_PATHS']:
-            syspaths.append(f'"{p}",')
+            syspaths.append('"%s",' % p.replace('\\', '\\\\'))
 
         save(filename, waftool_src_template % (
             'sys.path = [\n    %s\n]+sys.path' % '\n    '.join(syspaths),
@@ -630,6 +630,7 @@ def _override_default_compiler_selection(conf, env):
             '191': 15,
             '192': 16,
             '193': 17,
+            '194': 17,
         }
         arch = env.CONAN_SETTINGS['arch']
         if arch == 'x86_64':
