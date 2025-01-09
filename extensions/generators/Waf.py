@@ -157,6 +157,9 @@ class Waf(object):
             return out
 
         sortit = 0
+        
+        runenv = {}
+        buildenv = {}
 
         #generate host dep info (includes, flags, etc)
         for name, info in depmap_host.items():
@@ -164,9 +167,12 @@ class Waf(object):
             sorted_deps = toposort_deps(self, depmap_host, info, sortit)
             info['use'] = list(reversed(sorted_deps))
             self.proc_cpp_info(info, out)
+            
+            #add env info
+            buildenv.update(info['buildenv_info'].vars(self.conanfile, scope="run"))
+            runenv.update(info['runenv_info'].vars(self.conanfile, scope="run"))
 
         #collect bindirs
-        buildenv = {}
         for name, info in depmap_build.items():
             sortit += 1
             sorted_deps = toposort_deps(self, depmap_build, info, sortit)
@@ -175,12 +181,14 @@ class Waf(object):
 
             #add buildenv info
             buildenv.update(info['buildenv_info'].vars(self.conanfile, scope="build"))
+            buildenv.update(info['runenv_info'].vars(self.conanfile, scope="build"))
 
         buildenv['PATH'] = os.pathsep.join(list(out.get('CONAN_BUILD_BIN_PATH', set())) + ['$PATH'])
         buildenv['LD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_BUILD_LIB_PATH', set()))
         buildenv['DYLD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_BUILD_LIB_PATH', set()))
 
         out['CONAN_BUILDENV'] = buildenv
+        out['CONAN_RUNENV'] = runenv
 
         return out
 
