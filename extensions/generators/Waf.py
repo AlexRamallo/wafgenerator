@@ -299,10 +299,10 @@ class Waf(object):
             if "WAF_TOOLS" not in envvars.keys():
                 continue
 
-            tools = envvars["WAF_TOOLS"].split(" ")
+            tools = envvars["WAF_TOOLS"].strip().split(" ")
             for entry in tools:
                 if not os.path.exists(entry):
-                    self.outputs.warn(f"Waf tool entry not found: {entry}")
+                    self.conanfile.output.warning(f"Waf tool entry not found: {entry}")
                     continue
                 
                 if os.path.isfile(entry):
