@@ -154,7 +154,7 @@ However, this will only work for `conanfile.py`, and not `conanfile.txt`:
 
 ```py
 class MyPackage(ConanFile):
-    python_requires = "wafgenerator/0.1.5"
+    python_requires = "wafgenerator/0.1.6"
     def generate(self):
         gen = self.python_requires["wafgenerator"].module.Waf(self)
         gen.generate()
@@ -177,7 +177,7 @@ For example:
 
 ```py
 class MyPackage(ConanFile):
-    python_requires = "wafgenerator/0.1.5@github/alexramallo"
+    python_requires = "wafgenerator/0.1.6@github/alexramallo"
     def generate(self):
         gen = self.python_requires["wafgenerator"].module.Waf(self)
         gen.generate()
