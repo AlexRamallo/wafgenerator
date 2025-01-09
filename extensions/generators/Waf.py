@@ -89,7 +89,14 @@ class Waf(object):
         out = {
             "ALL_CONAN_PACKAGES": [],
             "ALL_CONAN_PACKAGES_BUILD": [],
+            'CONAN_BUILD_BIN_PATH': set(),
+            'CONAN_BUILD_LIB_PATH': set(),
+            'CONAN_BUILD_FRAMEWORK_PATH': set(),
+            'CONAN_RUN_BIN_PATH': set(),
+            'CONAN_RUN_LIB_PATH': set(),
+            'CONAN_RUN_FRAMEWORK_PATH': set(),
         }
+
         depmap_host = {}
         depmap_build = {}
 
@@ -105,6 +112,7 @@ class Waf(object):
                     use_name = self.get_use_name(ref_name, dep.ref.name)
                     comp_depnames.append(use_name)
                     depmap[use_name] = {
+                        'run': req.run,
                         'build': req.build,
                         'cpp_info': cpp_info,
                         'usename': use_name,
@@ -117,6 +125,7 @@ class Waf(object):
                 #generate a parent "pkg::pkg"
                 use_name = self.get_use_name(dep.ref.name)
                 depmap[use_name] = {
+                    'run': req.run,
                     'build': req.build,
                     'cpp_info': dep.cpp_info,
                     'usename': use_name,
@@ -129,6 +138,7 @@ class Waf(object):
                 #only generate "pkg"
                 use_name = self.get_use_name(dep.ref.name)
                 depmap[use_name] = {
+                    'run': req.run,
                     'build': req.build,
                     'cpp_info': dep.cpp_info,
                     'usename': use_name,
@@ -186,6 +196,12 @@ class Waf(object):
         buildenv['PATH'] = os.pathsep.join(list(out.get('CONAN_BUILD_BIN_PATH', set())) + ['$PATH'])
         buildenv['LD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_BUILD_LIB_PATH', set()))
         buildenv['DYLD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_BUILD_LIB_PATH', set()))
+        buildenv['DYLD_FRAMEWORK_PATH'] = os.pathsep.join(out.get('CONAN_BUILD_FRAMEWORK_PATH', set()))
+        
+        runenv['PATH'] = os.pathsep.join(list(out.get('CONAN_RUN_BIN_PATH', set())) + ['$PATH'])
+        runenv['LD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_RUN_LIB_PATH', set()))
+        runenv['DYLD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_RUN_LIB_PATH', set()))
+        runenv['DYLD_FRAMEWORK_PATH'] = os.pathsep.join(out.get('CONAN_RUN_FRAMEWORK_PATH', set()))
 
         out['CONAN_BUILDENV'] = buildenv
         out['CONAN_RUNENV'] = runenv
@@ -201,15 +217,20 @@ class Waf(object):
             if v:
                 out[f"{k}_{name}"] = v
 
+        def resolvepath(v):
+            if type(v) is list:
+                return [os.path.abspath(p) for p in v if os.path.exists(p)]
+            else:
+                return [os.path.abspath(v)] if os.path.exists(v) else []
+
         def setpath(k, v):
             #convert relative paths from conan to absolute
+            ret = resolvepath(v)
             if type(v) is list:
-                ret = [os.path.abspath(p) for p in v]
                 setvar(k, ret)
                 return ret
             else:
                 assert type(v) is str
-                ret = [os.path.abspath(v)]
                 setvar(k, ret[0])
                 return ret
 
@@ -225,20 +246,27 @@ class Waf(object):
 
             #process build dependencies
             abs_bindirs = setpath("BINPATH", cpp_info.bindirs)
-            if 'CONAN_BUILD_BIN_PATH' not in out:
-                out['CONAN_BUILD_BIN_PATH'] = set()
-            out['CONAN_BUILD_BIN_PATH'].update(abs_bindirs)
+            abs_libdirs = setpath("LIBPATH", cpp_info.libdirs)
+            abs_fwdirs = setpath("FRAMEWORKPATH", cpp_info.frameworkdirs)
 
-            abs_libdirs = setpath("LIBPATH", cpp_info.bindirs)
-            if 'CONAN_BUILD_LIB_PATH' not in out:
-                out['CONAN_BUILD_LIB_PATH'] = set()
-            out['CONAN_BUILD_LIB_PATH'].update(abs_libdirs)
+            #accumulate deps info for generating PATH/LD_LIBRARY_PATH
+            if depinfo['run']:
+                out['CONAN_BUILD_BIN_PATH'].update(abs_bindirs)
+                out['CONAN_BUILD_LIB_PATH'].update(abs_libdirs)
+                out['CONAN_BUILD_FRAMEWORK_PATH'].update(abs_fwdirs)
         else:
             #process host dependencies
             out["ALL_CONAN_PACKAGES"].append(name)
             
             #CONAN_USE is used by waftool to expand deps for usenames
             setvar('CONAN_USE', [d['usename'] for d in depinfo['use']])
+
+            #accumulate deps info for generating PATH/LD_LIBRARY_PATH
+            if depinfo['run']:
+                out['CONAN_RUN_BIN_PATH'].update(resolvepath(cpp_info.bindirs))
+                out['CONAN_RUN_LIB_PATH'].update(resolvepath(cpp_info.libdirs))
+                out['CONAN_RUN_FRAMEWORK_PATH'].update(resolvepath(cpp_info.frameworkdirs))
+
 
         libs = cpp_info.libs + cpp_info.system_libs + cpp_info.objects
         
