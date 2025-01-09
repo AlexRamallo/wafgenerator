@@ -1,18 +1,12 @@
 import subprocess
 
 
-def run(cmd, error=False, *, stdout=subprocess.PIPE, stderr=subprocess.PIPE):
-    process = subprocess.Popen(cmd, 
-                               stdout=stdout,
-                               stderr=stderr,
-                               shell=True)
-
-    out, err = process.communicate()
-    out = out.decode("utf-8") if stdout else ""
-    err = err.decode("utf-8") if stderr else ""
+def run(cmd, *, error=False):
+    print(f'<<RUN: {cmd}>>')
+    process = subprocess.run(cmd, text=True, shell=True)
+    output = process.stdout
     ret = process.returncode
 
-    output = err + out
     if ret != 0 and not error:
         raise Exception("Failed cmd: {}\n{}".format(cmd, output))
     if ret == 0 and error:

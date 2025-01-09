@@ -2,6 +2,7 @@
 compiler=clang
 compiler.libcxx=c++_static
 compiler.version=17
+compiler.cppstd=17
 os=Android
 os.api_level=30
 

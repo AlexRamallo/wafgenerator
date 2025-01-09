@@ -11,8 +11,8 @@ class WafConanTestProject(ConanFile):
     def configure(self):
         self.options['sdl'].shared = True
 
-    generators = ['Waf']
-    # python_requires = "wafgenerator/0.1.1@github/alexramallo"
+    generators = "Waf"
+    # python_requires = "wafgenerator/0.1.5"
     # def generate(self):
     #     gen = self.python_requires["wafgenerator"].module.Waf(self)
     #     gen.generate()

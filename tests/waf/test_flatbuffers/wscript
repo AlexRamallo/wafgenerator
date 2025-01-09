@@ -5,6 +5,8 @@ def configure(conf):
 	conf.load('conan_deps', tooldir='build')
 	conf.load('compiler_cxx')
 
+	print(conf.env)
+
 	#flatc will be found in conan cache
 	conf.find_program("flatc", var="FLATC")
 

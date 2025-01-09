@@ -39,6 +39,72 @@ def build(bld):
 	)
 ```
 
+### Managing Conan build/run environment variables
+
+By default, the Conan **build environment** will be activated when executing the `configure` and
+`build` commands (as well as any commands that subclass `waflib.Build.Buildcontext`). This
+activation tries to emulate the behavior of Conan's [VirtualRunEnv](https://docs.conan.io/2/reference/tools/env/virtualrunenv.html),
+and it achieves it by monkey patching the core BuildContext class.
+
+You can disable this auto activation behavior by setting `conf.env.CONAN_DONT_ACTIVATE = True`
+during configuration **before** loading 'conan_deps'. At that point, you can control environment
+activation using `ctx.activate_conan_env(...)`/`ctx.deactivate_conan_env()`. Example:
+
+```py
+def configure(conf):
+	conf.env.CONAN_DONT_ACTIVATE = True
+	conf.load('conan_deps', build='tooldir')
+
+	# failure
+	conf.find_program('flatc') # can't find program in Conan cache
+
+	# success!
+	conf.activate_conan_env('build')
+	conf.find_program('flatc') # now it can!
+```
+
+Some details:
+
+* Use `activate_conan_env('build')` or `activate_conan_env('run')`
+* `deactivate_conan_env()` will undo the effects of a previous activation
+* `activate_conan_env` will always deactivate before activating
+* activations impact the process (`os.environ`), so it's generally unsafe to activate/deactivate
+  inside a Task run body (or any multithreaded sections).
+	* Instead, use the `ctx.env.CONAN_BUILDENV`/`ctx.env.CONAN_RUNENV` variables to manually set the
+	  environment you want for `subprocess.run`, `cmd_and_log`, etc
+
+
+The 'run' environment is mostly useful if you have a custom command for launching your built
+executables from waf (as opposed to a regular launch using VirtualRunEnv). For example:
+
+```py
+def options(opt):
+    opt.load('compiler_cxx')
+
+def configure(conf):
+    conf.load('compiler_cxx')
+    conf.load('conan_deps', tooldir='build')
+
+def build(bld):
+    bld.program(features = 'conan', source = 'main.cpp', target = 'app', use = 'spdlog')
+
+def run(ctx):
+    tg = ctx.get_tgen_by_name('app')
+    tg.post()
+    ctx.exec_command(tg.link_task.outputs[0].abspath())
+
+import waflib
+class RunContext(waflib.Build.BuildContext):
+    cmd = 'run'
+    def execute_build(self):
+        self.recurse([self.run_dir])
+        self.activate_conan_env('run')
+        run(self)
+```
+
+When you build and execute `waf run`, the compiled app will be executed with the host environment
+variables declared in the Conan dependency graph.
+
 ## Installation (method 1)
 
 The easiest way to install this is to run:
@@ -88,7 +154,7 @@ However, this will only work for `conanfile.py`, and not `conanfile.txt`:
 
 ```py
 class MyPackage(ConanFile):
-    python_requires = "wafgenerator/0.1"
+    python_requires = "wafgenerator/0.1.5"
     def generate(self):
         gen = self.python_requires["wafgenerator"].module.Waf(self)
         gen.generate()
@@ -111,7 +177,7 @@ For example:
 
 ```py
 class MyPackage(ConanFile):
-    python_requires = "wafgenerator/0.1.1@github/alexramallo"
+    python_requires = "wafgenerator/0.1.5@github/alexramallo"
     def generate(self):
         gen = self.python_requires["wafgenerator"].module.Waf(self)
         gen.generate()

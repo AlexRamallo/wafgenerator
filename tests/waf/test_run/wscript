@@ -1,0 +1,23 @@
+def options(opt):
+    opt.load('compiler_cxx')
+
+def configure(conf):
+    conf.load('compiler_cxx')
+    conf.load('conan_deps', tooldir='build')
+
+def build(bld):
+    bld.activate_conan_env('build')    
+    bld.program(features = 'conan', source = 'main.cpp', target = 'app', use = 'spdlog')
+
+def run(ctx):
+    tg = ctx.get_tgen_by_name('app')
+    tg.post()
+    ctx.exec_command(tg.link_task.outputs[0].abspath())
+
+import waflib
+class RunContext(waflib.Build.BuildContext):
+    cmd = 'run'
+    def execute_build(self):
+        self.recurse([self.run_dir])
+        self.activate_conan_env('run')
+        run(self)

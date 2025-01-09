@@ -1,14 +1,13 @@
-import os, json
+import os
 from conan import ConanFile
-from conan.tools.files import copy
 
-class WafConanTestProjectNDK(ConanFile):
+class WafConanTestProject(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
-    requires = ["flatbuffers/23.5.26"]
-    build_requires = ["flatbuffers/23.5.26"]
+    requires = "spdlog/1.12.0"
 
     generators = "Waf"
     # python_requires = "wafgenerator/0.1.5"
     # def generate(self):
     #     gen = self.python_requires["wafgenerator"].module.Waf(self)
     #     gen.generate()
+
