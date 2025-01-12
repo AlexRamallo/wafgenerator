@@ -194,14 +194,14 @@ class Waf(object):
             buildenv.update(info['runenv_info'].vars(self.conanfile, scope="build"))
 
         buildenv['PATH'] = os.pathsep.join(list(out.get('CONAN_BUILD_BIN_PATH', set())) + ['$PATH'])
-        buildenv['LD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_BUILD_LIB_PATH', set()))
-        buildenv['DYLD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_BUILD_LIB_PATH', set()))
-        buildenv['DYLD_FRAMEWORK_PATH'] = os.pathsep.join(out.get('CONAN_BUILD_FRAMEWORK_PATH', set()))
+        buildenv['LD_LIBRARY_PATH'] = os.pathsep.join(list(out.get('CONAN_BUILD_LIB_PATH', set())) + ['$LD_LIBRARY_PATH'])
+        buildenv['DYLD_LIBRARY_PATH'] = os.pathsep.join(list(out.get('CONAN_BUILD_LIB_PATH', set())) + ['$DYLD_LIBRARY_PATH'])
+        buildenv['DYLD_FRAMEWORK_PATH'] = os.pathsep.join(list(out.get('CONAN_BUILD_FRAMEWORK_PATH', set())) + ['$DYLD_FRAMEWORK_PATH'])
         
         runenv['PATH'] = os.pathsep.join(list(out.get('CONAN_RUN_BIN_PATH', set())) + ['$PATH'])
-        runenv['LD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_RUN_LIB_PATH', set()))
-        runenv['DYLD_LIBRARY_PATH'] = os.pathsep.join(out.get('CONAN_RUN_LIB_PATH', set()))
-        runenv['DYLD_FRAMEWORK_PATH'] = os.pathsep.join(out.get('CONAN_RUN_FRAMEWORK_PATH', set()))
+        runenv['LD_LIBRARY_PATH'] = os.pathsep.join(list(out.get('CONAN_RUN_LIB_PATH', set())) + ['$LD_LIBRARY_PATH'])
+        runenv['DYLD_LIBRARY_PATH'] = os.pathsep.join(list(out.get('CONAN_RUN_LIB_PATH', set())) + ['$DYLD_LIBRARY_PATH'])
+        runenv['DYLD_FRAMEWORK_PATH'] = os.pathsep.join(list(out.get('CONAN_RUN_FRAMEWORK_PATH', set())) + ['$DYLD_FRAMEWORK_PATH'])
 
         out['CONAN_BUILDENV'] = buildenv
         out['CONAN_RUNENV'] = runenv
