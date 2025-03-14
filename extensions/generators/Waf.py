@@ -1,6 +1,7 @@
 import os
 from conan.internal import check_duplicated_generator
 from conans.util.files import save
+from conan.tools.env.environment import Environment
 
 class Waf(object):
     def __init__(self, conanfile):
@@ -118,8 +119,6 @@ class Waf(object):
                         'usename': use_name,
                         'requires': [self.get_use_name(c, dep.ref.name) for c in cpp_info.requires],
                         'package': self.get_use_name(dep.ref.name),
-                        'buildenv_info': dep.buildenv_info,
-                        'runenv_info': dep.runenv_info,
                     }
 
                 #generate a parent "pkg::pkg"
@@ -168,8 +167,8 @@ class Waf(object):
 
         sortit = 0
         
-        runenv = {}
-        buildenv = {}
+        runenv = Environment()
+        buildenv = Environment()
 
         #generate host dep info (includes, flags, etc)
         for name, info in depmap_host.items():
@@ -177,10 +176,12 @@ class Waf(object):
             sorted_deps = toposort_deps(self, depmap_host, info, sortit)
             info['use'] = list(reversed(sorted_deps))
             self.proc_cpp_info(info, out)
-            
+
             #add env info
-            buildenv.update(info['buildenv_info'].vars(self.conanfile, scope="run"))
-            runenv.update(info['runenv_info'].vars(self.conanfile, scope="run"))
+            if be := getattr(info, 'buildenv_info', None):
+                buildenv.compose_env(be.vars(self.conanfile, scope="run"))
+            if re := getattr(info, 'runenv_info', None):
+                runenv.compose_env(re.vars(self.conanfile, scope="run"))
 
         #collect bindirs
         for name, info in depmap_build.items():
@@ -189,22 +190,26 @@ class Waf(object):
             info['use'] = list(reversed(sorted_deps))
             self.proc_cpp_info(info, out)
 
-            #add buildenv info
-            buildenv.update(info['buildenv_info'].vars(self.conanfile, scope="build"))
-            buildenv.update(info['runenv_info'].vars(self.conanfile, scope="build"))
+            if be := info.get('buildenv_info', None):
+                buildenv.compose_env(be.vars(self.conanfile, scope="build"))
+            if re := info.get('runenv_info', None):
+                runenv.compose_env(re.vars(self.conanfile, scope="build"))
 
-        buildenv['PATH'] = os.pathsep.join(list(out.get('CONAN_BUILD_BIN_PATH', set())) + ['$PATH'])
-        buildenv['LD_LIBRARY_PATH'] = os.pathsep.join(list(out.get('CONAN_BUILD_LIB_PATH', set())) + ['$LD_LIBRARY_PATH'])
-        buildenv['DYLD_LIBRARY_PATH'] = os.pathsep.join(list(out.get('CONAN_BUILD_LIB_PATH', set())) + ['$DYLD_LIBRARY_PATH'])
-        buildenv['DYLD_FRAMEWORK_PATH'] = os.pathsep.join(list(out.get('CONAN_BUILD_FRAMEWORK_PATH', set())) + ['$DYLD_FRAMEWORK_PATH'])
+        buildenv.prepend_path('PATH', os.pathsep.join(list(out.get('CONAN_BUILD_BIN_PATH', set()))))
+        buildenv.prepend_path('LD_LIBRARY_PATH', os.pathsep.join(list(out.get('CONAN_BUILD_LIB_PATH', set()))))
+        buildenv.prepend_path('DYLD_LIBRARY_PATH', os.pathsep.join(list(out.get('CONAN_BUILD_LIB_PATH', set()))))
+        buildenv.prepend_path('DYLD_FRAMEWORK_PATH', os.pathsep.join(list(out.get('CONAN_BUILD_FRAMEWORK_PATH', set()))))
         
-        runenv['PATH'] = os.pathsep.join(list(out.get('CONAN_RUN_BIN_PATH', set())) + ['$PATH'])
-        runenv['LD_LIBRARY_PATH'] = os.pathsep.join(list(out.get('CONAN_RUN_LIB_PATH', set())) + ['$LD_LIBRARY_PATH'])
-        runenv['DYLD_LIBRARY_PATH'] = os.pathsep.join(list(out.get('CONAN_RUN_LIB_PATH', set())) + ['$DYLD_LIBRARY_PATH'])
-        runenv['DYLD_FRAMEWORK_PATH'] = os.pathsep.join(list(out.get('CONAN_RUN_FRAMEWORK_PATH', set())) + ['$DYLD_FRAMEWORK_PATH'])
+        runenv.prepend_path('PATH', os.pathsep.join(list(out.get('CONAN_RUN_BIN_PATH', set()))))
+        runenv.prepend_path('LD_LIBRARY_PATH', os.pathsep.join(list(out.get('CONAN_RUN_LIB_PATH', set()))))
+        runenv.prepend_path('DYLD_LIBRARY_PATH', os.pathsep.join(list(out.get('CONAN_RUN_LIB_PATH', set()))))
+        runenv.prepend_path('DYLD_FRAMEWORK_PATH', os.pathsep.join(list(out.get('CONAN_RUN_FRAMEWORK_PATH', set()))))
 
-        out['CONAN_BUILDENV'] = buildenv
-        out['CONAN_RUNENV'] = runenv
+        be = buildenv.vars(self.conanfile, scope="build")
+        re = runenv.vars(self.conanfile, scope="run")
+
+        out['CONAN_BUILDENV'] = {k: v for k, v in be.items()}
+        out['CONAN_RUNENV'] = {k: v for k, v in re.items()}
 
         return out
 
