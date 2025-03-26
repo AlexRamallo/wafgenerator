@@ -2,6 +2,8 @@ import os
 from conan.internal import check_duplicated_generator
 from conans.util.files import save
 from conan.tools.env.environment import Environment
+import conan.tools.env.virtualrunenv as virtualrunenv
+import conan.tools.env.virtualbuildenv as virtualbuildenv
 
 class Waf(object):
     def __init__(self, conanfile):
@@ -102,7 +104,7 @@ class Waf(object):
         depmap_build = {}
 
         for req, dep in self.conanfile.dependencies.items():
-            # print(dep.ref, f", direct={req.direct}, build={req.build}")
+            # print(dep.ref, f", direct={req.direct}, build={req.build}, run={req.run}, test={req.test}")
             depmap = depmap_build if req.build else depmap_host
 
             if dep.cpp_info.has_components:
@@ -113,8 +115,7 @@ class Waf(object):
                     use_name = self.get_use_name(ref_name, dep.ref.name)
                     comp_depnames.append(use_name)
                     depmap[use_name] = {
-                        'run': req.run,
-                        'build': req.build,
+                        'build': bool(req.build),
                         'cpp_info': cpp_info,
                         'usename': use_name,
                         'requires': [self.get_use_name(c, dep.ref.name) for c in cpp_info.requires],
@@ -124,8 +125,7 @@ class Waf(object):
                 #generate a parent "pkg::pkg"
                 use_name = self.get_use_name(dep.ref.name)
                 depmap[use_name] = {
-                    'run': req.run,
-                    'build': req.build,
+                    'build': bool(req.build),
                     'cpp_info': dep.cpp_info,
                     'usename': use_name,
                     'requires': comp_depnames,
@@ -137,8 +137,7 @@ class Waf(object):
                 #only generate "pkg"
                 use_name = self.get_use_name(dep.ref.name)
                 depmap[use_name] = {
-                    'run': req.run,
-                    'build': req.build,
+                    'build': bool(req.build),
                     'cpp_info': dep.cpp_info,
                     'usename': use_name,
                     'requires': [self.get_use_name(c, dep.ref.name) for c in dep.cpp_info.requires],
@@ -147,7 +146,7 @@ class Waf(object):
                     'runenv_info': dep.runenv_info,
                 }
 
-        def toposort_deps(self, depmap, root, i):
+        def toposort_deps(depmap, root, i):
             out = []
             def visit(n):
                 if n.get('__visited', 0) == i:
@@ -164,52 +163,27 @@ class Waf(object):
                 out.append(n)
             visit(root)
             return out
-
         sortit = 0
         
-        runenv = Environment()
-        buildenv = Environment()
-
-        #generate host dep info (includes, flags, etc)
+        # process host requirements
         for name, info in depmap_host.items():
             sortit += 1
-            sorted_deps = toposort_deps(self, depmap_host, info, sortit)
+            sorted_deps = toposort_deps(depmap_host, info, sortit)
             info['use'] = list(reversed(sorted_deps))
             self.proc_cpp_info(info, out)
 
-            #add env info
-            if be := getattr(info, 'buildenv_info', None):
-                buildenv.compose_env(be.vars(self.conanfile, scope="run"))
-            if re := getattr(info, 'runenv_info', None):
-                runenv.compose_env(re.vars(self.conanfile, scope="run"))
-
-        #collect bindirs
+        # process build requirements
         for name, info in depmap_build.items():
             sortit += 1
-            sorted_deps = toposort_deps(self, depmap_build, info, sortit)
+            sorted_deps = toposort_deps(depmap_build, info, sortit)
             info['use'] = list(reversed(sorted_deps))
             self.proc_cpp_info(info, out)
 
-            if be := info.get('buildenv_info', None):
-                buildenv.compose_env(be.vars(self.conanfile, scope="build"))
-            if re := info.get('runenv_info', None):
-                runenv.compose_env(re.vars(self.conanfile, scope="build"))
+        vrunenv = virtualrunenv.VirtualRunEnv(self.conanfile)
+        out['CONAN_RUNENV'] = dict(vrunenv.vars())
 
-        buildenv.prepend_path('PATH', os.pathsep.join(list(out.get('CONAN_BUILD_BIN_PATH', set()))))
-        buildenv.prepend_path('LD_LIBRARY_PATH', os.pathsep.join(list(out.get('CONAN_BUILD_LIB_PATH', set()))))
-        buildenv.prepend_path('DYLD_LIBRARY_PATH', os.pathsep.join(list(out.get('CONAN_BUILD_LIB_PATH', set()))))
-        buildenv.prepend_path('DYLD_FRAMEWORK_PATH', os.pathsep.join(list(out.get('CONAN_BUILD_FRAMEWORK_PATH', set()))))
-        
-        runenv.prepend_path('PATH', os.pathsep.join(list(out.get('CONAN_RUN_BIN_PATH', set()))))
-        runenv.prepend_path('LD_LIBRARY_PATH', os.pathsep.join(list(out.get('CONAN_RUN_LIB_PATH', set()))))
-        runenv.prepend_path('DYLD_LIBRARY_PATH', os.pathsep.join(list(out.get('CONAN_RUN_LIB_PATH', set()))))
-        runenv.prepend_path('DYLD_FRAMEWORK_PATH', os.pathsep.join(list(out.get('CONAN_RUN_FRAMEWORK_PATH', set()))))
-
-        be = buildenv.vars(self.conanfile, scope="build")
-        re = runenv.vars(self.conanfile, scope="run")
-
-        out['CONAN_BUILDENV'] = {k: v for k, v in be.items()}
-        out['CONAN_RUNENV'] = {k: v for k, v in re.items()}
+        vbuildenv = virtualbuildenv.VirtualBuildEnv(self.conanfile)
+        out['CONAN_BUILDENV'] = dict(vbuildenv.vars())
 
         return out
 
@@ -248,29 +222,12 @@ class Waf(object):
             #CONAN_USE is used by waftool to expand deps for usenames
 
             setvar('CONAN_USE', ['build_%s' % d['usename'] for d in depinfo['use']])
-
-            #process build dependencies
-            abs_bindirs = setpath("BINPATH", cpp_info.bindirs)
-            abs_libdirs = setpath("LIBPATH", cpp_info.libdirs)
-            abs_fwdirs = setpath("FRAMEWORKPATH", cpp_info.frameworkdirs)
-
-            #accumulate deps info for generating PATH/LD_LIBRARY_PATH
-            if depinfo['run']:
-                out['CONAN_BUILD_BIN_PATH'].update(abs_bindirs)
-                out['CONAN_BUILD_LIB_PATH'].update(abs_libdirs)
-                out['CONAN_BUILD_FRAMEWORK_PATH'].update(abs_fwdirs)
         else:
             #process host dependencies
             out["ALL_CONAN_PACKAGES"].append(name)
             
             #CONAN_USE is used by waftool to expand deps for usenames
             setvar('CONAN_USE', [d['usename'] for d in depinfo['use']])
-
-            #accumulate deps info for generating PATH/LD_LIBRARY_PATH
-            if depinfo['run']:
-                out['CONAN_RUN_BIN_PATH'].update(resolvepath(cpp_info.bindirs))
-                out['CONAN_RUN_LIB_PATH'].update(resolvepath(cpp_info.libdirs))
-                out['CONAN_RUN_FRAMEWORK_PATH'].update(resolvepath(cpp_info.frameworkdirs))
 
 
         libs = cpp_info.libs + cpp_info.system_libs + cpp_info.objects
@@ -537,7 +494,7 @@ def configure(conf):
         conf.activate_conan_env()
 
     for p in conf.env.ALL_CONAN_PACKAGES:
-        conf.msg('Conan usename', p)
+        conf.msg('Conan component', p)
 
     _override_default_compiler_selection(conf, conf.env)
     _apply_cppstd(conf, conf.env)
