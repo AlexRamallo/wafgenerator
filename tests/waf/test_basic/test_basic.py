@@ -1,6 +1,6 @@
-import shutil
+import os
+import sys
 import tempfile
-import os, sys
 
 import pytest
 

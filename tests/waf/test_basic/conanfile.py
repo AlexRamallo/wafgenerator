@@ -1,6 +1,4 @@
-import os, json
 from conan import ConanFile
-from conan.tools.files import copy
 
 class WafConanTestProject(ConanFile):
     settings = "os", "compiler", "build_type", "arch"

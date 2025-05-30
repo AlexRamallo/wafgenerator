@@ -1,6 +1,4 @@
-import os, json
 from conan import ConanFile
-from conan.tools.files import copy
 
 class WafConanTestProject(ConanFile):
     name = "waf_conan_test_sdl"

@@ -1,0 +1,19 @@
+def options(opt):
+	opt.load('compiler_cxx')
+
+def configure(conf):
+	conf.load('conan_deps', tooldir='build')
+	conf.load('compiler_cxx')
+
+def build(bld):
+	# get spdlog ref info and pass it to program as a compile time definition
+	info = bld.get_conan_package_ref('spdlog')
+	assert info, "Failed to get package ref"
+	bld.env.append_value('DEFINES_spdlog', f'CONAN_REF="{info[0]}/{info[1]}@{info[2]}/{info[3]}"')
+
+	bld(
+		features = "cxx cxxprogram conan",
+		source = "main.cpp",
+		use = "spdlog",
+		target = "app"
+	)

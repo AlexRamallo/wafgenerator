@@ -1,7 +1,6 @@
 import os
 from conan.internal import check_duplicated_generator
 from conans.util.files import save
-from conan.tools.env.environment import Environment
 import conan.tools.env.virtualrunenv as virtualrunenv
 import conan.tools.env.virtualbuildenv as virtualbuildenv
 
@@ -17,8 +16,8 @@ class Waf(object):
                 * <comp> refers to a component in the current package
                 * <pkg>::<comp> refers to a component in another package
         """
-        assert(type(ref_name) is str)
-        assert(not parent_ref or type(parent_ref) is str)
+        assert type(ref_name) is str
+        assert not parent_ref or type(parent_ref) is str
         if '::' in ref_name:
             sp = ref_name.split('::')
             if sp[0] == sp[1]:
@@ -54,9 +53,9 @@ class Waf(object):
             "conan_deps.py"
         )
 
-        set_conan_to_waf_arch(settings, output)
-        set_conan_to_waf_os(settings, output)
-        set_conan_to_waf_compiler(settings, output)
+        set_conan_to_waf_arch(self.conanfile, settings, output)
+        set_conan_to_waf_os(self.conanfile, settings, output)
+        set_conan_to_waf_compiler(self.conanfile, settings, output)
 
         deps = []
         for k,v in output.items():
@@ -75,19 +74,6 @@ class Waf(object):
             '\n    '.join(deps),
         ))
 
-    def gen_usedeps(self):
-        """
-            Generate CONAN_USE_<x> vars for all components and packages
-        """
-        out = {}
-
-        def resolve_pkg(req, dep):
-            usename = self.get_use_name(dep.ref.name, dep.ref.name)
-            comp_deps = []
-            pkg_deps = []
-            if dep.has_components:
-                comp_deps = list(reversed(dep.cpp_info.get_sorted_components()))
-
     def gen_deps(self):
         out = {
             "ALL_CONAN_PACKAGES": [],
@@ -103,9 +89,16 @@ class Waf(object):
         depmap_host = {}
         depmap_build = {}
 
+        # map of package ref info (name/version/user/channel)
+        deprefs_host = {}
+        deprefs_build = {}
+
         for req, dep in self.conanfile.dependencies.items():
             # print(dep.ref, f", direct={req.direct}, build={req.build}, run={req.run}, test={req.test}")
             depmap = depmap_build if req.build else depmap_host
+            refmap = deprefs_build if req.build else deprefs_host
+
+            refmap[dep.ref.name] = (dep.ref.version, dep.ref.user, dep.ref.channel)
 
             if dep.cpp_info.has_components:
                 comp_depnames = []
@@ -118,6 +111,7 @@ class Waf(object):
                         'build': bool(req.build),
                         'cpp_info': cpp_info,
                         'usename': use_name,
+                        'ref_name': dep.ref.name,
                         'requires': [self.get_use_name(c, dep.ref.name) for c in cpp_info.requires],
                         'package': self.get_use_name(dep.ref.name),
                     }
@@ -128,6 +122,7 @@ class Waf(object):
                     'build': bool(req.build),
                     'cpp_info': dep.cpp_info,
                     'usename': use_name,
+                    'ref_name': dep.ref.name,
                     'requires': comp_depnames,
                     'package': self.get_use_name(dep.ref.name),
                     'buildenv_info': dep.buildenv_info,
@@ -140,6 +135,7 @@ class Waf(object):
                     'build': bool(req.build),
                     'cpp_info': dep.cpp_info,
                     'usename': use_name,
+                    'ref_name': dep.ref.name,
                     'requires': [self.get_use_name(c, dep.ref.name) for c in dep.cpp_info.requires],
                     'package': use_name,
                     'buildenv_info': dep.buildenv_info,
@@ -165,12 +161,23 @@ class Waf(object):
             return out
         sortit = 0
         
+        # reverse mapping of use_name to ref_name/version
+        out['ALL_CONAN_PACKAGE_REFS'] = {
+            name: (str(version), user, channel)
+                for name, (version, user, channel) in deprefs_host.items()
+        }
+        out['ALL_CONAN_PACKAGE_REFS_BUILD'] = {
+            name: (str(version), user, channel)
+                for name, (version, user, channel) in deprefs_build.items()
+        }        
+
         # process host requirements
         for name, info in depmap_host.items():
             sortit += 1
             sorted_deps = toposort_deps(depmap_host, info, sortit)
             info['use'] = list(reversed(sorted_deps))
             self.proc_cpp_info(info, out)
+            out['CONAN_REFNAME_%s' % info['usename']] = str(info['ref_name'])
 
         # process build requirements
         for name, info in depmap_build.items():
@@ -178,6 +185,7 @@ class Waf(object):
             sorted_deps = toposort_deps(depmap_build, info, sortit)
             info['use'] = list(reversed(sorted_deps))
             self.proc_cpp_info(info, out)
+            out['CONAN_REFNAME_BUILD_%s' % info['usename']] = str(info['ref_name'])
 
         vrunenv = virtualrunenv.VirtualRunEnv(self.conanfile)
         out['CONAN_RUNENV'] = dict(vrunenv.vars())
@@ -189,7 +197,7 @@ class Waf(object):
 
     def proc_cpp_info(self, depinfo, out):
         name = depinfo['usename']
-        pkg_name = depinfo['package']
+        #pkg_name = depinfo['package']
         cpp_info = depinfo['cpp_info']
 
         def setvar(k, v):
@@ -302,11 +310,11 @@ class Waf(object):
                     out.append(entry)
         return out
 
-def set_conan_to_waf_os(settings, env):
+def set_conan_to_waf_os(conanfile, settings, env):
     #try to map dest os to `waflib.Utils.unversioned_sys_platform()` outputs
     #first, then fallback to just using the conan name directly
     os = settings.get('os', None)
-    if os == None:
+    if os is None:
         return
     if os == 'Macos':
         os = 'darwin'
@@ -330,9 +338,9 @@ def set_conan_to_waf_os(settings, env):
         env['IOS_SDK_NAME'] = settings.get('os.sdk')
         env['IOS_SDK_MINVER'] = settings.get('os.sdk_version')
 
-def set_conan_to_waf_compiler(settings, env):
+def set_conan_to_waf_compiler(conanfile, settings, env):
     compiler = settings.get('compiler', None)
-    if compiler == None:
+    if compiler is None:
         return
     libcxx = settings.get('compiler.libcxx')
     runtime = settings.get('compiler.runtime')
@@ -341,7 +349,7 @@ def set_conan_to_waf_compiler(settings, env):
     exception = settings.get('compiler.exception')
 
     if threads or exception:
-        warn(f'WARNING: MinGW flags not handled yet!!')
+        conanfile.output.warning('WARNING: MinGW flags not handled yet!!')
 
     env['CXXFLAGS'] = env.get('CXXFLAGS', [])
     env['LINKFLAGS'] = env.get('LINKFLAGS', [])
@@ -369,11 +377,11 @@ def set_conan_to_waf_compiler(settings, env):
         env['CXXFLAGS'].append(f'/{flag}')
 
 
-def set_conan_to_waf_arch(settings, env):
+def set_conan_to_waf_arch(conanfile, settings, env):
     #based on Conan settings.yml + `walib.Tools.c_config.MACRO_TO_DEST_CPU`
     #note the original conan arch can be found in the 'CONAN_SETTINGS' key
     arch = settings.get('arch', None)
-    if arch == None:
+    if arch is None:
         return
     archmap = {
         'x86_64': [
@@ -526,6 +534,15 @@ def activate_conan_env(ctx, env='build'):
     if src:
         apply_env_vars(ctx, src, True)
 
+@conf
+def get_conan_package_ref(ctx, usename, env='host'):
+    # from a 'usename', return a tuple containing owning package's (name, version, user, channel)
+    assert env in ('host', 'build'), f"invalid 'env' value: {env}"
+    info = 'ALL_CONAN_PACKAGE_REFS' if env == 'host' else 'ALL_CONAN_PACKAGE_REFS_BUILD'
+    if name := ctx.env[f'CONAN_REFNAME_{usename}']:
+        ref = ctx.env[info][name]
+        return (name, ref[0], ref[1], ref[2])
+    return None
 
 @feature("conan")
 @before_method("process_use")
