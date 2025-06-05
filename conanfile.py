@@ -9,7 +9,7 @@ except ModuleNotFoundError:
 
 class WafGenerator(ConanFile):
     name = "wafgenerator"
-    version = "0.1.10"
+    version = "0.1.12"
     homepage = "https://github.com/alexramallo/waf-conan-generator"
     description = "A Conan generator for waf"
     license = "MIT"

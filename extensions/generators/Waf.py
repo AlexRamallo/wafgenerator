@@ -1,6 +1,6 @@
 import os
 from conan.internal import check_duplicated_generator
-from conans.util.files import save
+from conan.tools.files import save
 import conan.tools.env.virtualrunenv as virtualrunenv
 import conan.tools.env.virtualbuildenv as virtualbuildenv
 
@@ -69,7 +69,7 @@ class Waf(object):
         for p in output['DEP_SYS_PATHS']:
             syspaths.append('"%s",' % p.replace('\\', '\\\\'))
 
-        save(filename, waftool_src_template % (
+        save(self, filename, waftool_src_template % (
             'sys.path = [\n    %s\n]+sys.path' % '\n    '.join(syspaths),
             '\n    '.join(deps),
         ))
@@ -188,10 +188,10 @@ class Waf(object):
             out['CONAN_REFNAME_BUILD_%s' % info['usename']] = str(info['ref_name'])
 
         vrunenv = virtualrunenv.VirtualRunEnv(self.conanfile)
-        out['CONAN_RUNENV'] = dict(vrunenv.vars())
+        out['CONAN_RUNENV'] = dict(vrunenv.vars().items("${name}"))
 
         vbuildenv = virtualbuildenv.VirtualBuildEnv(self.conanfile)
-        out['CONAN_BUILDENV'] = dict(vbuildenv.vars())
+        out['CONAN_BUILDENV'] = dict(vbuildenv.vars().items("${name}"))
 
         return out
 
