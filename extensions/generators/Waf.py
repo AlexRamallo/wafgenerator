@@ -40,11 +40,11 @@ class Waf(object):
         settings = self.conanfile.settings.serialize()
 
         output.update({
-            #these are host settings
+            # these are host settings
             "CONAN_SETTINGS": settings,
-            #paths that should be added to sys.path (only waf tools currently)
+            # paths that should be added to sys.path (only waf tools currently)
             "DEP_SYS_PATHS": self._get_waftools_paths(),
-            #global Conan config/flags
+            # global Conan config/flags
             "CONAN_CONFIG": self._get_conan_config()
         })
 
@@ -64,7 +64,7 @@ class Waf(object):
             else:
                 deps.append(f'conf.env.{k} = {v}')
 
-        #python syspath from deps (for distributing waf tools as conan packages)
+        # python syspath from deps (for distributing waf tools as conan packages)
         syspaths = []
         for p in output['DEP_SYS_PATHS']:
             syspaths.append('"%s",' % p.replace('\\', '\\\\'))
@@ -102,7 +102,7 @@ class Waf(object):
 
             if dep.cpp_info.has_components:
                 comp_depnames = []
-                #generate "pkg::comp" for each comp
+                # generate "pkg::comp" for each comp
                 comps = dep.cpp_info.get_sorted_components().items()
                 for ref_name, cpp_info in comps:
                     use_name = self.get_use_name(ref_name, dep.ref.name)
@@ -116,7 +116,7 @@ class Waf(object):
                         'package': self.get_use_name(dep.ref.name),
                     }
 
-                #generate a parent "pkg::pkg"
+                # generate a parent "pkg::pkg"
                 use_name = self.get_use_name(dep.ref.name)
                 depmap[use_name] = {
                     'build': bool(req.build),
@@ -129,7 +129,7 @@ class Waf(object):
                     'runenv_info': dep.runenv_info,
                 }
             else:
-                #only generate "pkg"
+                # only generate "pkg"
                 use_name = self.get_use_name(dep.ref.name)
                 depmap[use_name] = {
                     'build': bool(req.build),
@@ -197,7 +197,7 @@ class Waf(object):
 
     def proc_cpp_info(self, depinfo, out):
         name = depinfo['usename']
-        #pkg_name = depinfo['package']
+        # pkg_name = depinfo['package']
         cpp_info = depinfo['cpp_info']
 
         def setvar(k, v):
@@ -211,7 +211,7 @@ class Waf(object):
                 return [os.path.abspath(v)] if os.path.exists(v) else []
 
         def setpath(k, v):
-            #convert relative paths from conan to absolute
+            # convert relative paths from conan to absolute
             ret = resolvepath(v)
             if type(v) is list:
                 setvar(k, ret)
@@ -222,28 +222,28 @@ class Waf(object):
                 return ret
 
         if depinfo['build']:            
-            #add 'build_' prefix to all usenames for build items
-            #avoids name conflicts while making build graph available in scripts
+            # add 'build_' prefix to all usenames for build items
+            # avoids name conflicts while making build graph available in scripts
             name = f'build_{name}'
 
             out["ALL_CONAN_PACKAGES_BUILD"].append(name)
-            #CONAN_USE is used by waftool to expand deps for usenames
+            # CONAN_USE is used by waftool to expand deps for usenames
 
             setvar('CONAN_USE', ['build_%s' % d['usename'] for d in depinfo['use']])
         else:
-            #process host dependencies
+            # process host dependencies
             out["ALL_CONAN_PACKAGES"].append(name)
             
-            #CONAN_USE is used by waftool to expand deps for usenames
+            # CONAN_USE is used by waftool to expand deps for usenames
             setvar('CONAN_USE', [d['usename'] for d in depinfo['use']])
 
 
         libs = cpp_info.libs + cpp_info.system_libs + cpp_info.objects
         
-        #warning: default waf C/C++ tasks don't distinguish between exelink and
-        #sharedlink; will need to override `run_str`. For reference, see:
-        #`waflib.Tools.cxx.cxxshlib`. this could be handled by a waftool if it's
-        #ever needed
+        # warning: default waf C/C++ tasks don't distinguish between exelink and
+        # sharedlink; will need to override `run_str`. For reference, see:
+        # `waflib.Tools.cxx.cxxshlib`. this could be handled by a waftool if it's
+        # ever needed
 
         linkflags = list(set(cpp_info.sharedlinkflags + cpp_info.exelinkflags))
         setvar("LINKFLAGS", linkflags)
@@ -262,7 +262,7 @@ class Waf(object):
         setpath("BUILDPATH", cpp_info.builddirs)
         setpath("BINPATH", cpp_info.bindirs)
 
-        #Unused waf variables:
+        # Unused waf variables:
         # "ARCH"
         # "STLIB"
         # "STLIBPATH"
@@ -286,13 +286,13 @@ class Waf(object):
         return out
 
     def _get_waftools_paths(self):
-        #enables distributing waf tools inside of conan packages
-        #e.g. add a waf tool to the 'flatbuffers' package so that you can use
-        #the flatc compiler from wscripts, and not worry about versioning
+        # enables distributing waf tools inside of conan packages
+        # e.g. add a waf tool to the 'flatbuffers' package so that you can use
+        # the flatc compiler from wscripts, and not worry about versioning
         out = []
         for require, dependency in self.conanfile.dependencies.items():
             if not require.build:
-                continue #only find waf tools from build environment
+                continue # only find waf tools from build environment
             envvars = dependency.buildenv_info.vars(self.conanfile, scope="build")
             if "WAF_TOOLS" not in envvars.keys():
                 continue
@@ -311,8 +311,8 @@ class Waf(object):
         return out
 
 def set_conan_to_waf_os(conanfile, settings, env):
-    #try to map dest os to `waflib.Utils.unversioned_sys_platform()` outputs
-    #first, then fallback to just using the conan name directly
+    # try to map dest os to `waflib.Utils.unversioned_sys_platform()` outputs
+    # first, then fallback to just using the conan name directly
     os = settings.get('os', None)
     if os is None:
         return
@@ -367,9 +367,9 @@ def set_conan_to_waf_compiler(conanfile, settings, env):
         # https://developer.android.com/ndk/guides/cpp-support#use_clang_directly
         env['LINKFLAGS'].append('-static-libstdc++')
     elif libcxx == 'c++_shared':
-        pass #android clang uses shared version by default
+        pass # android clang uses shared version by default
 
-    #Windows CRT
+    # Windows CRT
     if runtime and runtime_type:
         flag = 'M' + ('D' if runtime == 'dynamic' else 'T')
         if runtime_type == 'Debug':
@@ -378,8 +378,8 @@ def set_conan_to_waf_compiler(conanfile, settings, env):
 
 
 def set_conan_to_waf_arch(conanfile, settings, env):
-    #based on Conan settings.yml + `walib.Tools.c_config.MACRO_TO_DEST_CPU`
-    #note the original conan arch can be found in the 'CONAN_SETTINGS' key
+    # based on Conan settings.yml + `walib.Tools.c_config.MACRO_TO_DEST_CPU`
+    # note the original conan arch can be found in the 'CONAN_SETTINGS' key
     arch = settings.get('arch', None)
     if arch is None:
         return
@@ -441,13 +441,13 @@ def set_conan_to_waf_arch(conanfile, settings, env):
             'e2k-v7',
         ],
 
-        #in waf, but not in standard conan settings.yml:
+        # in waf, but not in standard conan settings.yml:
         # '__alpha__'   :'alpha',
         # '__hppa__'    :'hppa',
         # '__convex__'  :'convex',
         # '__m68k__'    :'m68k',
 
-        #in conan, but not in waf
+        # in conan, but not in waf
         # avr
         # asm.js
         # wasm
@@ -465,12 +465,12 @@ from waflib.Logs import warn
 from waflib.Configure import conf
 from waflib.Tools.compiler_c import c_compiler
 from waflib.Tools.compiler_cxx import cxx_compiler
-from waflib.TaskGen import feature, before_method
+from waflib.TaskGen import feature, before_method, after_method
 
-#---------------------python sys paths from dependencies-----------------------#
+#-------------------------------python sys paths from dependencies---------------------------------#
 # ex: conf.load('some_tool', with_sys_path=True)
 %s
-#------------------------------------------------------------------------------#
+#--------------------------------------------------------------------------------------------------#
 
 # Monkeypatch BuildContext.execute_build to auto-activate conan build environment
 # Disable this by setting 'conf.env.CONAN_DONT_ACTIVATE=True' during configuration
@@ -494,9 +494,9 @@ patch_execute()
 
 
 def configure(conf):
-    #-------------------configuration info from dependencies-------------------#
+    #-----------------------------configuration info from dependencies-----------------------------#
     %s
-    #--------------------------------------------------------------------------#
+    #----------------------------------------------------------------------------------------------#
 
     if not conf.env.CONAN_DONT_ACTIVATE:
         conf.activate_conan_env()
@@ -555,6 +555,27 @@ def expand_conan_targets(tg):
             continue
         [uselist.append(r) for r in deps if r not in uselist]
     tg.use = uselist
+
+
+# This does a topological sort of the use list after expansion since, waf doesn't seem to provide a 
+# way to model dependencies between foreign libraries
+@feature("conan")
+@after_method("expand_conan_targets")
+@before_method("process_use")
+def sort_conan_deps(tg):
+    def visit(usename: str, out, visited):
+        if usename in visited:
+            return
+        visited.add(usename)
+        for dep in getattr(tg.env, f'CONAN_USE_{usename}', []):
+            visit(dep, out, visited)
+        out.append(usename)
+        return out
+    out = []
+    visited = set()
+    for usename in tg.use:
+        visit(usename, out, visited)
+    tg.use = list(reversed(out))
 
 
 stored_env = {}
@@ -664,6 +685,7 @@ def _override_default_compiler_selection(conf, env):
 
     compile_name_map = {
         #Conan name:    (C++ name, C name)
+        'emcc':         ('em++', 'emcc'),
         'clang':        ('clangxx', 'clang'),
         'apple-clang':  ('clangxx', 'clang'),
         'gcc':          ('gxx', 'gcc'),
@@ -734,6 +756,8 @@ def _apply_cppstd(conf, env):
             'gnu20':    ['-std=gnu++20'],
             '23':       ['-std=c++23'],
             'gnu23':    ['-std=gnu++23'],
+            '26':       ['-std=c++26'],
+            'gnu26':    ['-std=gnu++26'],
         },
         'gcc': {
             '98':       ['--std', 'c++98'],
@@ -748,12 +772,15 @@ def _apply_cppstd(conf, env):
             'gnu20':    ['--std', 'gnu++20'],
             '23':       ['--std', 'c++23'],
             'gnu23':    ['--std', 'gnu++23'],
+            '26':       ['--std', 'c++26'],
+            'gnu26':    ['--std', 'gnu++26'],
         },
         'msvc': {
             '14':       ['/std:c++14'],
             '17':       ['/std:c++17'],
             '20':       ['/std:c++20'],
-            '23':       ['/std:latest']
+            '23':       ['/std:c++23'],
+            '26':       ['/std:latest']
         },
     }
     if compiler not in flags:
