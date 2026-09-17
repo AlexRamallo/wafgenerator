@@ -4,7 +4,7 @@ class WafConanTestProject(ConanFile):
     name = "waf_conan_test_sdl"
     version = "1.0"
     settings = "os", "compiler", "build_type", "arch"
-    requires = "sdl/2.28.3"
+    requires = "sdl/[>=2 <3]"
 
     def configure(self):
         self.options['sdl'].shared = True
