@@ -248,13 +248,13 @@ class Waf(object):
         linkflags = list(set(cpp_info.sharedlinkflags + cpp_info.exelinkflags))
         setvar("LINKFLAGS", linkflags)
         setvar("LIB", libs)
-        setpath("LIBPATH", cpp_info.libdirs)
+        setpath("LIBPATH", list(set(cpp_info.libdirs)))
         setvar("CFLAGS", cpp_info.cflags)
         setvar("CXXFLAGS", cpp_info.cxxflags)
-        setvar("INCLUDES", cpp_info.includedirs)
+        setvar("INCLUDES", list(set(cpp_info.includedirs)))
         setvar("DEFINES", cpp_info.defines)
         setvar("FRAMEWORK", cpp_info.frameworks)
-        setpath("FRAMEWORKPATH", cpp_info.frameworkdirs)
+        setpath("FRAMEWORKPATH", list(set(cpp_info.frameworkdirs)))
 
         #Extra non-waf variables from Conan cpp_info
         setpath("SRCPATH", cpp_info.srcdirs)
