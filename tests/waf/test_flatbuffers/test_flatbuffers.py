@@ -34,8 +34,8 @@ def test_waf_flatbuffers():
     run(f"{sys.executable} ../waf configure build -v")
     dir_list = os.listdir('build')
     if 'app' in dir_list:
-        run(os.path.join('build', 'app'))
+        run(os.path.join('build', 'app'), runenv=os.path.join('build', 'conanrun.sh'))
     elif 'app.exe' in dir_list:
-        run(os.path.join('build', 'app.exe'))
+        run(os.path.join('build', 'app.exe'), runenv=os.path.join('build', 'conanrun.bat'))
     else:
         assert 0, 'missing output'

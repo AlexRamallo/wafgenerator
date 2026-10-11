@@ -1,8 +1,13 @@
 import subprocess
 
 
-def run(cmd, *, error=False):
+def run(cmd, *, error=False, runenv=None):
     print(f'<<RUN: {cmd}>>')
+
+    if runenv:
+        # TODO: Windows version
+        cmd = f'source {runenv}; {cmd}'
+
     process = subprocess.run(cmd, text=True, shell=True)
     output = process.stdout
     ret = process.returncode

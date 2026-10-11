@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from conan.internal import check_duplicated_generator
 from conan.tools.files import save
 import conan.tools.env.virtualrunenv as virtualrunenv
@@ -129,7 +130,7 @@ class Waf(object):
                     'runenv_info': dep.runenv_info,
                 }
             else:
-                # only generate "pkg"
+                # only generate "pkg" if there are no components
                 use_name = self.get_use_name(dep.ref.name)
                 depmap[use_name] = {
                     'build': bool(req.build),
@@ -237,18 +238,55 @@ class Waf(object):
             # CONAN_USE is used by waftool to expand deps for usenames
             setvar('CONAN_USE', [d['usename'] for d in depinfo['use']])
 
+        def get_linkname(libname):
+            if libname.startswith('lib'):
+                libname = libname[3:]
+            idx = libname.rfind('.')
+            if idx >= 0:
+                libname = libname[:idx]
+            return libname
 
-        libs = cpp_info.libs + cpp_info.system_libs + cpp_info.objects
-        
+        def locate_lib(libname):
+            suffix = ('','.so', '.a', '.lib', '.dll')
+            prefix = ('','lib')
+            for libdir in cpp_info.libdirs:
+                p = Path(libdir)
+                for pre in prefix:
+                    for suf in suffix:
+                        pp = p/f'{pre}{libname}{suf}'
+                        if pp.exists():
+                            return pp.name
+            return libname
+
+        libs = []
+        stlibs = []
+        for libname in cpp_info.libs:
+            lib = locate_lib(libname)
+            if lib.endswith('.so') or lib.endswith('.dll'):
+                libs.append(get_linkname(lib))
+            elif lib.endswith('.a') or lib.endswith('.lib'):
+                stlibs.append(get_linkname(lib))
+
         # warning: default waf C/C++ tasks don't distinguish between exelink and
         # sharedlink; will need to override `run_str`. For reference, see:
         # `waflib.Tools.cxx.cxxshlib`. this could be handled by a waftool if it's
         # ever needed
+        linkflags = cpp_info.sharedlinkflags + cpp_info.exelinkflags
 
-        linkflags = list(set(cpp_info.sharedlinkflags + cpp_info.exelinkflags))
+        # TODO: test whether including cpp_info.objects here is a good idea
+        for lib in cpp_info.system_libs + cpp_info.objects:
+            if Path(lib).is_absolute(): # eg '/usr/lib64/libX.so'
+                linkflags.append(lib)
+            else: # eg 'm', 'pthread'
+                libs.append(lib)
+                
+        libdirs = list(set(cpp_info.libdirs))
+
         setvar("LINKFLAGS", linkflags)
         setvar("LIB", libs)
-        setpath("LIBPATH", list(set(cpp_info.libdirs)))
+        setpath("LIBPATH", libdirs)
+        setvar("STLIB", stlibs)
+        setpath("STLIBPATH", libdirs)
         setvar("CFLAGS", cpp_info.cflags)
         setvar("CXXFLAGS", cpp_info.cxxflags)
         setvar("INCLUDES", list(set(cpp_info.includedirs)))
