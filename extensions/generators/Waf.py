@@ -207,9 +207,9 @@ class Waf(object):
 
         def resolvepath(v):
             if type(v) is list:
-                return [os.path.abspath(p) for p in v if os.path.exists(p)]
+                return [os.path.abspath(p) for p in v]
             else:
-                return [os.path.abspath(v)] if os.path.exists(v) else []
+                return [os.path.abspath(v)]
 
         def setpath(k, v):
             # convert relative paths from conan to absolute
